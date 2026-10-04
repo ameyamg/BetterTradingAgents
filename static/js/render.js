@@ -3,17 +3,17 @@
 
 import {
   EVIDENCE_META, ICONS, OUTLOOK_LABELS, RESEARCH_KEYS,
-} from "./constants.js?v=11";
-import { activeAgents, depthProfile } from "./options.js?v=11";
-import { state } from "./state.js?v=11";
-import { saveToWatchlist } from "./watchlist-actions.js?v=11";
-import { attachPaperOrder } from "./broker-actions.js?v=11";
-import { loadPriceChart } from "./price-chart.js?v=11";
-import { retryTicker } from "./tickers.js?v=11";
-import { sendChatMessage, setChatOpen, toggleChat } from "./chat.js?v=11";
+} from "./constants.js?v=12";
+import { activeAgents, depthProfile } from "./options.js?v=12";
+import { state } from "./state.js?v=12";
+import { saveToWatchlist } from "./watchlist-actions.js?v=12";
+import { attachPaperOrder } from "./broker-actions.js?v=12";
+import { loadPriceChart } from "./price-chart.js?v=12";
+import { retryTicker } from "./tickers.js?v=12";
+import { sendChatMessage, setChatOpen, toggleChat } from "./chat.js?v=12";
 import {
   $, escapeAttr, escapeHtml, fmtCostUsd, fmtUsd, formatDate, formatDateTime, safeUrl,
-} from "./util.js?v=11";
+} from "./util.js?v=12";
 
 export function labelFor(agent, signal, confidence) {
   if (agent === "bull" || agent === "bear" || agent.endsWith("_rebuttal")) return `${Math.round((confidence ?? 0) * 100)}%`;
@@ -41,8 +41,10 @@ export function convictionLabel(confidence) {
 // Historical outcome rates for this decision + evidence bucket, or an honest
 // "unavailable" while the mature sample is too small (P0.1 -> P1.1). Fetched
 // after the card renders so grading data never delays the decision brief.
+// Skipped on incognito runs: the saved track record is the user's history,
+// and incognito must not read it either.
 function fetchTrackRecord(analysis) {
-  if (analysis.error) return;
+  if (analysis.error || state.runIncognito) return;
   const params = new URLSearchParams({
     decision: analysis.decision || "HOLD",
     confidence: String(analysis.confidence ?? 0),
@@ -214,7 +216,7 @@ export function renderSummaryTable() {
       </tr>`;
     }).join("")}</tbody>`;
   $("summary-panel").appendChild(table);
-  $("summary-panel").insertAdjacentHTML("beforeend", `<p class="results-help"><strong>Confidence = evidence strength, not profit odds.</strong> Educational simulation, not advice.${runCostSummary(analyses)}</p>`);
+  $("summary-panel").insertAdjacentHTML("beforeend", `<p class="results-help"><strong>Confidence = evidence strength, not profit odds.</strong> Educational simulation, not advice.${state.runIncognito ? " Incognito run: nothing was saved - download the report before closing this page." : ""}${runCostSummary(analyses)}</p>`);
   $("summary-panel").querySelectorAll("[data-open-ticker]").forEach((button) => button.addEventListener("click", () => openResult(button.dataset.openTicker)));
 }
 
@@ -405,14 +407,19 @@ export function renderResultCard(analysis) {
     : "";
   // Experimental actions (settings: Experimentation tab); BTA_FEATURES is
   // filled by features.js, and the fetch resolves long before a card renders.
-  const compareLink = window.BTA_FEATURES?.compare && state.runId && !analysis.error
+  // Incognito runs skip them: saving a run that the server never kept (and
+  // must never keep) would only break, and trading is off by design.
+  const compareLink = window.BTA_FEATURES?.compare && state.runId && !analysis.error && !state.runIncognito
     ? `<a class="secondary-btn compare-btn" href="/compare?items=${encodeURIComponent(`${state.runId}:${ticker}`)}">Compare</a>`
     : "";
-  const watchControls = window.BTA_FEATURES?.watchlist
+  const watchControls = window.BTA_FEATURES?.watchlist && !state.runIncognito
     ? (analysis.error
       ? '<span class="muted">Watchlist saves need a finished call.</span>'
       : `<button class="secondary-btn watch-btn" id="watch-${ticker}" type="button">Save to watchlist</button><span class="added-note hidden" id="watched-${ticker}" role="status"></span>`)
     : "";
+  const tradeNote = state.runIncognito
+    ? '<span class="muted">Incognito run: trading, saving, and history are off.</span>'
+    : (analysis.decision === "BUY" && analysis.price ? "" : '<span class="muted">Paper orders are offered on BUY calls with a live price.</span>');
   const printBtn = '<button class="secondary-btn print-btn" type="button">Print brief</button>';
 
   card.innerHTML = `
@@ -449,7 +456,7 @@ export function renderResultCard(analysis) {
       <section class="result-block" aria-labelledby="evidence-title-${ticker}"><div class="block-heading"><h3 id="evidence-title-${ticker}">Analyst evidence</h3></div><div class="grid-3">${evidenceHtml}</div>${skippedResearch.length ? `<p class="hint">Skipped for speed: ${skippedResearch.map((key) => EVIDENCE_META[key].title).join(" · ")}</p>` : ""}</section>
       <section class="result-block sources-block" aria-labelledby="sources-title-${ticker}"><div class="block-heading"><h3 id="sources-title-${ticker}">Sources</h3><p>${escapeHtml(providerText(analysis.providers))}</p></div>${renderSources(analysis.source_references)}</section>
       ${renderTrackRecord(analysis, ticker)}
-      <div class="result-actions">${analysis.decision === "BUY" && analysis.price ? "" : '<span class="muted">Paper orders are offered on BUY calls with a live price.</span>'}<div class="add-row${window.BTA_FEATURES?.watchlist ? " watch-row" : ""}">${watchControls}${compareLink}${printBtn}<button class="secondary-btn retry-btn" type="button">Retry ${escapeHtml(ticker)}</button></div></div>
+      <div class="result-actions">${tradeNote}<div class="add-row${window.BTA_FEATURES?.watchlist && !state.runIncognito ? " watch-row" : ""}">${watchControls}${compareLink}${printBtn}<button class="secondary-btn retry-btn" type="button">Retry ${escapeHtml(ticker)}</button></div></div>
     </div>`;
 
   const existing = $(`result-${ticker}`);
@@ -474,7 +481,8 @@ export function renderResultCard(analysis) {
   card.querySelector(".print-btn").addEventListener("click", () => printBrief(card));
   // Paper order review step (P2.1): offered on non-error BUY calls, and on
   // SELL when the paper account holds the ticker. Appends itself only then.
-  if (!analysis.error) {
+  // Never on incognito runs: they cannot trade.
+  if (!analysis.error && !state.runIncognito) {
     attachPaperOrder(card.querySelector(".result-actions"), analysis, state.runId || "");
   }
   if (!analysis.error && window.BTA_FEATURES?.watchlist && $(`watch-${ticker}`)) {

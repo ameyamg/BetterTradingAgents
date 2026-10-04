@@ -68,6 +68,24 @@
 .chip-btn:hover { color: var(--text); border-color: rgba(16, 201, 115, 0.55); background: rgba(16, 201, 115, 0.08); }
 .chip-btn:active { transform: scale(0.97); }
 
+/* incognito mode: market-only runs, slate-blue so it never reads as a trade action */
+.incognito-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.incognito-row .muted { flex: 1 1 260px; }
+.incognito-toggle {
+  display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; cursor: pointer;
+  border: 1px solid var(--border-strong); border-radius: 999px; color: #cbd3e1;
+  background: rgba(255, 255, 255, 0.035); font: 600 12.5px var(--font); user-select: none;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.incognito-toggle:hover { color: var(--text); border-color: rgba(122, 156, 224, 0.6); }
+.incognito-toggle:has(input:checked) {
+  color: #aec3ee; border-color: rgba(122, 156, 224, 0.65); background: rgba(122, 156, 224, 0.12);
+}
+.incognito-toggle input { accent-color: #7a9ce0; height: 15px; width: 15px; flex: none; margin: 0; }
+.chip.incognito {
+  border-color: rgba(122, 156, 224, 0.4); background: rgba(122, 156, 224, 0.12); color: #aec3ee;
+}
+
 /* collapsible advanced options (outlook + depth) */
 .advanced-options {
   margin-top: 12px; border: 1px solid var(--border); border-radius: 11px;

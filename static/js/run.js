@@ -1,12 +1,12 @@
 /* Run lifecycle: start, stream, cancel, finish, restore, and rerun. */
 
-import { CLIENT_ID_KEY, LAST_RUN_KEY } from "./constants.js?v=11";
-import { activeAgents, setDepth, setOutlook } from "./options.js?v=11";
-import { state } from "./state.js?v=11";
-import { addTickerTags, setTickerTags } from "./tickers.js?v=11";
-import { handleEvent, updateOverallProgress, updateProgress } from "./events.js?v=11";
-import { labelFor, renderProgressCard, renderResultCard, renderSummaryTable, setAgentStatus, setHeader } from "./render.js?v=13";
-import { $, getClientId, hideError, showError, showToast } from "./util.js?v=11";
+import { CLIENT_ID_KEY, LAST_RUN_KEY } from "./constants.js?v=12";
+import { activeAgents, setDepth, setOutlook } from "./options.js?v=12";
+import { state } from "./state.js?v=12";
+import { addTickerTags, setTickerTags } from "./tickers.js?v=12";
+import { handleEvent, updateOverallProgress, updateProgress } from "./events.js?v=12";
+import { labelFor, renderProgressCard, renderResultCard, renderSummaryTable, setAgentStatus, setHeader } from "./render.js?v=14";
+import { $, getClientId, hideError, showError, showToast } from "./util.js?v=12";
 
 function storedRunId() {
   try { return localStorage.getItem(LAST_RUN_KEY); } catch (_) { return null; }
@@ -14,6 +14,17 @@ function storedRunId() {
 
 function persistRun(runId) {
   state.runId = runId;
+  // Incognito leaves no ?run= link and no stored id; a ?run= left over from
+  // a previously viewed normal run must go too (the stored normal-run id
+  // stays so that run remains restorable later).
+  if (state.runIncognito) {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("run")) {
+      url.searchParams.delete("run");
+      window.history.replaceState({}, "", url);
+    }
+    return;
+  }
   const url = new URL(window.location.href);
   url.searchParams.set("run", runId);
   window.history.replaceState({}, "", url);
@@ -148,6 +159,8 @@ export async function startAnalysis() {
 
   hideError();
   $("restore-notice").classList.add("hidden");
+  // Incognito: unattributed request (no client id) for a market-only run.
+  state.runIncognito = state.incognito;
   try {
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -156,7 +169,9 @@ export async function startAnalysis() {
         tickers: state.tickerTags,
         outlook: state.outlook,
         depth: state.depth,
-        client_id: getClientId(CLIENT_ID_KEY),
+        ...(state.runIncognito
+          ? { incognito: true }
+          : { client_id: getClientId(CLIENT_ID_KEY) }),
       }),
     });
     if (!response.ok) {
@@ -191,6 +206,7 @@ export function beginRun(tickers, options = {}) {
   $("results-section").classList.add("hidden");
   $("analyze-another-btn").classList.add("hidden");
   $("run-again-btn").classList.add("hidden");
+  $("download-report-btn").classList.add("hidden");
   $("cancel-note").classList.add("hidden");
   const cancelBtn = $("cancel-btn");
   cancelBtn.classList.remove("hidden");
@@ -320,7 +336,11 @@ export function finishRun({ duration = null, focusResults = true, failed = false
     $("results-section").classList.remove("hidden");
     $("analyze-another-btn").classList.remove("hidden");
     $("run-again-btn").classList.remove("hidden");
+    // The incognito report exists only in this page: offer the file download.
+    $("download-report-btn").classList.toggle("hidden", !state.runIncognito);
     if (focusResults) $("results-heading").focus({ preventScroll: false });
+  } else {
+    $("download-report-btn").classList.add("hidden");
   }
 }
 

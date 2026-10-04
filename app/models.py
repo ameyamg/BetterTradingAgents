@@ -238,6 +238,9 @@ class AnalysisRequest(BaseModel):
     client_id: str | None = Field(
         default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"
     )
+    # Incognito: market-only run. No portfolio access, no decision-memory read
+    # or write, nothing persisted, no trading. client_id is ignored.
+    incognito: bool = False
 
     def normalized(self) -> list[str]:
         seen: dict[str, None] = {}
@@ -262,6 +265,7 @@ class RunStatus(BaseModel):
     _depth_validator = field_validator("depth", mode="before")(classmethod(lambda cls, value: _depth_value(value)))
     status: Literal["running", "completed", "failed", "cancelled"] = "running"
     mock_mode: bool = False
+    incognito: bool = False  # market-only run; exists in memory only
     started_at: float = 0.0
     duration_s: float = 0.0
     error: str | None = None

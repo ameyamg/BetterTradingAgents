@@ -2,9 +2,9 @@
 
 import {
   AGENTS, DEPTH_KEY, DEPTH_PROFILES, OUTLOOKS, OUTLOOK_KEY, OUTLOOK_LABELS,
-} from "./constants.js?v=11";
-import { state } from "./state.js?v=11";
-import { $ } from "./util.js?v=11";
+} from "./constants.js?v=12";
+import { state } from "./state.js?v=12";
+import { $ } from "./util.js?v=12";
 
 export function setOutlook(outlook) {
   state.outlook = OUTLOOKS.includes(outlook) ? outlook : "short_term";
@@ -63,6 +63,14 @@ export function wireRadioGroups() {
 export function updateAdvancedSummary() {
   const values = $("adv-values");
   if (values) values.textContent = `${OUTLOOK_LABELS[state.outlook]} · ${depthProfile().label}`;
+}
+
+// Incognito mode: market-only runs with no portfolio access and nothing
+// saved. The toggle only affects the next run; the header chip confirms it.
+export function setIncognito(on) {
+  state.incognito = Boolean(on);
+  const chip = $("incognito-chip");
+  if (chip) chip.classList.toggle("hidden", !state.incognito);
 }
 
 export function depthProfile() {

@@ -89,9 +89,15 @@ def _agent_view(result) -> dict | None:
     }
 
 
-def _dossier(analysis: StockAnalysis, portfolio: PortfolioSummary | None) -> dict:
+def _dossier(
+    analysis: StockAnalysis,
+    portfolio: PortfolioSummary | None,
+    incognito: bool = False,
+) -> dict:
     """Compact, chat-sized view of one ticker's finished analysis."""
-    if portfolio is None:
+    if incognito:
+        holdings = "NOT SHARED - incognito run: no portfolio access"
+    elif portfolio is None:
         holdings = "UNAVAILABLE - portfolio lookup failed"
     elif not portfolio.positions:
         holdings = "no open positions (flat)"
@@ -195,13 +201,20 @@ def mock_answer(analysis: StockAnalysis) -> str:
     )
 
 
-async def answer_question(analysis: StockAnalysis, messages: list[dict]) -> str:
+async def answer_question(
+    analysis: StockAnalysis, messages: list[dict], incognito: bool = False
+) -> str:
     """Answer the user's latest question (messages[-1]) about a finished run.
 
     Earlier turns give the conversation context; the portfolio is fetched
     best-effort so answers account for exposure the user already holds.
+    Incognito runs skip that fetch: the chat knows only the market research.
     """
-    dossier = _dossier(analysis, await fetch_portfolio_summary())
+    dossier = _dossier(
+        analysis,
+        None if incognito else await fetch_portfolio_summary(),
+        incognito,
+    )
     llm = get_chat_llm()
     if llm is None:
         return mock_answer(analysis)

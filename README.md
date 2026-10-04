@@ -47,6 +47,7 @@ reference list and how each finding shapes the roadmap.
 | ⚖️ | **Risk-gated decisions** | BUYs are volatility-scaled and capped against your paper account by per-ticker, invested, and cash-buffer limits; downgrades are flagged, never silent. |
 | 📜 | **Learns from its calls** | Every decision is graded on realized return and alpha vs SPY; the manager weighs those lessons on the next run. |
 | 💬 | **Chat with the manager** | Every finished ticker gets a follow-up chat grounded in that run's research. |
+| 🕶️ | **Incognito mode** | Test the full pipeline market-only: no paper-account access, no trading, and nothing saved - download the report or chat, close the tab, and the run is gone. |
 | 🧪 | **Walk-forward backtests** | Replay the pipeline at past dates with point-in-time data only, graded against SPY after costs. |
 | 🕘 | **Durable history** | Completed and interrupted analyses are saved in SQLite and reopenable from the Runs page. |
 | 📊 | **Real market data** | Finnhub, Olostep, and yfinance for fundamentals, news, and prices; Nixtla TimeGPT optionally forecasts. |
@@ -106,6 +107,12 @@ if an agent fails, the manager still makes a call on the inputs that survived. T
 card ends in a conversation: expand the decision brief (conclusion, change conditions, the
 bull-versus-bear debate, evidence, sources, and your track record) and chat with the manager
 about the call.
+
+Just want to try it without touching anything of yours? Flip **Incognito mode** on the Home
+screen first: the run sees only market data (no paper account, no past-call memory), cannot
+trade or save to watchlist/history, and exists only in your browser tab - **Download report**
+exports the whole thing as a self-contained HTML file, and closing the page forgets the run
+server-side. The manager chat still works, grounded in that run's research alone.
 
 With paper trading configured, the Trades page also carries the **Autopilot** card: enable it
 and a background loop runs full trading sessions on a schedule, scanning the market for

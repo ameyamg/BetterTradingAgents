@@ -209,6 +209,7 @@ def evaluate(
     vol_ann_pct: float | None,
     portfolio: PortfolioSummary | None,
     forecast_change_pct: float | None = None,
+    incognito: bool = False,
 ) -> tuple[str, float, float | None, list[str]]:
     """Apply the risk gate to a manager decision.
 
@@ -246,7 +247,10 @@ def evaluate(
             )
 
         if portfolio is None:
-            flags.append("exposure caps skipped: portfolio unavailable")
+            # Incognito runs have no portfolio by design, not by failure: the
+            # mode badge already says so, so the caps note stays out of flags.
+            if not incognito:
+                flags.append("exposure caps skipped: portfolio unavailable")
         elif not portfolio.total_equity:
             flags.append("exposure caps skipped: portfolio value unavailable")
         else:

@@ -335,14 +335,21 @@ async def analyze(request: AnalysisRequest):
             status_code=400, detail=f"invalid ticker symbol(s): {', '.join(invalid)}"
         )
     run = await store.create(
-        tickers, request.client_id or "", request.outlook, request.depth
+        tickers,
+        # Incognito runs are unattributed: the client id is ignored so the
+        # run cannot be listed, restored, or tied to this browser later.
+        "" if request.incognito else (request.client_id or ""),
+        request.outlook,
+        request.depth,
+        incognito=request.incognito,
     )
     logger.info(
-        "[analysis] run %s started: %s (%s, %s)",
+        "[analysis] run %s started: %s (%s, %s%s)",
         run.run_id,
-        ", ".join(tickers),
+        "incognito tickers unnamed" if run.incognito else ", ".join(tickers),
         run.outlook,
         run.depth,
+        ", incognito" if run.incognito else "",
     )
     return AnalysisResponse(run_id=run.run_id, tickers=tickers)
 
@@ -374,6 +381,22 @@ async def run_status(run_id: str):
     if status is None:
         raise HTTPException(status_code=404, detail="run not found")
     return status
+
+
+@app.post("/api/runs/{run_id}/discard")
+async def discard_run(run_id: str):
+    """Forget an incognito run when its page closes.
+
+    Incognito runs were never persisted; this drops the in-memory copy (and
+    cancels it if still running) so no report data outlives the tab. Normal
+    runs are history and cannot be discarded.
+    """
+    if store.get(run_id) is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    if not await store.discard(run_id):
+        raise HTTPException(status_code=400, detail="only incognito runs can be discarded")
+    logger.info("[analysis] incognito run %s discarded", run_id)
+    return {"discarded": True}
 
 
 @app.post("/api/runs/{run_id}/cancel", response_model=CancelRunResponse)
@@ -445,9 +468,13 @@ async def manager_chat(run_id: str, request: ManagerChatRequest):
         )
     if request.messages[-1].role != "user":
         raise HTTPException(status_code=400, detail="last message must be from the user")
+    # Incognito chat stays incognito: the dossier is built without a portfolio.
+    run = store.get(run_id)
     try:
         answer = await chat.answer_question(
-            analysis, [message.model_dump() for message in request.messages]
+            analysis,
+            [message.model_dump() for message in request.messages],
+            incognito=bool(run and run.incognito),
         )
     except Exception as exc:  # noqa: BLE001 - surfaced as a retryable 503
         raise HTTPException(status_code=503, detail=f"manager chat failed: {exc}") from exc

@@ -15,7 +15,10 @@ from app.workflow import analyze_ticker, fetch_held_closes, fetch_portfolio_summ
 logger = logging.getLogger("analysis")
 ANALYSIS_CACHE_TTL_SECONDS = 60 * 60
 
-AnalysisCacheKey = tuple[str, str, str, int, bool, str]
+# Cache key: ticker, outlook, depth, debate rounds, mock mode, portfolio (or
+# "unavailable"), incognito, then the sizing/gating settings that shape the
+# result. Kept as a plain tuple so new inputs cannot silently miss the alias.
+AnalysisCacheKey = tuple
 
 
 class Run:
@@ -25,6 +28,7 @@ class Run:
         client_id: str = "",
         outlook: str = DEFAULT_OUTLOOK,
         depth: str = DEFAULT_DEPTH,
+        incognito: bool = False,
     ):
         self.run_id = uuid.uuid4().hex[:12]
         self.tickers = tickers
@@ -33,6 +37,9 @@ class Run:
         self.depth = normalize_depth(depth)
         self.status = "running"
         self.mock_mode = not settings.llm_configured
+        # Incognito: market-only. No portfolio, no decision memory, no
+        # persistence - the run lives in memory until its page closes.
+        self.incognito = incognito
         self.started_at = time.time()
         self.completed_at: float | None = None
         self.error: str | None = None
@@ -62,6 +69,7 @@ class Run:
             depth=self.depth,
             status=self.status,
             mock_mode=self.mock_mode,
+            incognito=self.incognito,
             started_at=self.started_at,
             duration_s=round(finished - self.started_at, 1),
             error=self.error,
@@ -93,14 +101,41 @@ class RunStore:
         client_id: str = "",
         outlook: str = DEFAULT_OUTLOOK,
         depth: str = DEFAULT_DEPTH,
+        incognito: bool = False,
     ) -> Run:
-        run = Run(tickers, client_id, outlook, depth)
+        if incognito:
+            self._prune_incognito()
+        run = Run(tickers, client_id, outlook, depth, incognito=incognito)
         self.runs[run.run_id] = run
-        await self._persist(run)
+        if not incognito:
+            await self._persist(run)
         run.execution_task = asyncio.create_task(
             self._execute(run), name=f"execute:{run.run_id}"
         )
         return run
+
+    def _prune_incognito(self) -> None:
+        """Keep at most two finished incognito runs in memory (older pages
+        lose their chat, bounded memory); running ones always stay."""
+        terminal = sorted(
+            (run for run in self.runs.values() if run.incognito and run.status != "running"),
+            key=lambda run: run.started_at,
+        )
+        for run in terminal[:-2]:
+            self.runs.pop(run.run_id, None)
+
+    async def discard(self, run_id: str) -> bool:
+        """Forget an incognito run when its page closes: cancel it if still
+        running, then drop it from memory so no report data outlives the tab
+        (logs still note that some incognito run happened, never which ticker
+        or call). Persisted runs are history and cannot be discarded."""
+        run = self.get(run_id)
+        if run is None or not run.incognito:
+            return False
+        if run.status == "running":
+            await self.cancel(run_id)
+        self.runs.pop(run_id, None)
+        return True
 
     async def cancel(self, run_id: str) -> RunStatus | None:
         """Stop a running run, keeping whatever ticker results already finished.
@@ -172,6 +207,10 @@ class RunStore:
             settings.debate_rounds,
             run.mock_mode,
             portfolio.model_dump_json() if portfolio is not None else "unavailable",
+            # Incognito analyses never merge with normal ones: they ran
+            # without decision-memory context and must not be saved or served
+            # as if they had.
+            run.incognito,
             # P2.9: sizing and gating settings change the result (suggested
             # size, risk flags), so a changed setting must not serve stale
             # cached analyses.
@@ -185,9 +224,9 @@ class RunStore:
         )
 
     @staticmethod
-    async def _emit_cached(run: Run, result: StockAnalysis) -> None:
+    async def _emit_cached(run: Run, result: StockAnalysis, cached: bool = True) -> None:
         await run.emit(
-            "ticker_started", {"ticker": result.ticker, "cached": True}
+            "ticker_started", {"ticker": result.ticker, "cached": cached}
         )
         await run.emit(
             "ticker_data",
@@ -196,7 +235,7 @@ class RunStore:
                 "price": result.price,
                 "company_name": result.company_name,
                 "sources": result.providers,
-                "cached": True,
+                "cached": cached,
             },
         )
         await run.emit(
@@ -207,7 +246,7 @@ class RunStore:
                 "confidence": result.confidence,
                 "duration_s": 0.0,
                 "analysis": result.model_dump(),
-                "cached": True,
+                "cached": cached,
             },
         )
 
@@ -239,12 +278,22 @@ class RunStore:
     ) -> StockAnalysis:
         # The comparison partner for `What changed` (P1.5), computed once per
         # ticker and applied on every path (fresh, cache hit, inflight join).
-        previous = await changes.previous_call(
-            run.client_id, ticker, run.run_id, run.started_at
+        # Incognito skips it: reading past runs would leak saved history into
+        # a run that is supposed to know nothing about the user.
+        previous = (
+            None
+            if run.incognito
+            else await changes.previous_call(
+                run.client_id, ticker, run.run_id, run.started_at
+            )
         )
         key = self._cache_key(run, ticker, portfolio)
         cached = self.analysis_cache.get(key)
-        if cached and time.monotonic() - cached[0] < ANALYSIS_CACHE_TTL_SECONDS:
+        if (
+            not run.incognito
+            and cached
+            and time.monotonic() - cached[0] < ANALYSIS_CACHE_TTL_SECONDS
+        ):
             result = cached[1].model_copy(deep=True)
             changes.attach(result, previous)
             logger.info("[analysis] %s cache hit", ticker)
@@ -254,7 +303,7 @@ class RunStore:
         task = self.analysis_inflight.get(key)
         if task is not None:
             result = await self._await_inflight(run, key, task)
-            if not result.error:
+            if not run.incognito and not result.error:
                 self.analysis_cache[key] = (
                     time.monotonic(),
                     result.model_copy(deep=True),
@@ -262,7 +311,9 @@ class RunStore:
             result = result.model_copy(deep=True)
             changes.attach(result, previous)
             logger.info("[analysis] %s joined cached in-flight analysis", ticker)
-            await self._emit_cached(run, result)
+            # Incognito never reads the cache, so a shared in-flight analysis
+            # must not wear the "cached" badge either.
+            await self._emit_cached(run, result, cached=not run.incognito)
             return result
 
         task = asyncio.create_task(
@@ -275,11 +326,12 @@ class RunStore:
                 run_id=run.run_id,
                 held_closes=held_closes,
                 previous=previous,
+                incognito=run.incognito,
             )
         )
         self.analysis_inflight[key] = task
         result = await self._await_inflight(run, key, task)
-        if not result.error:
+        if not run.incognito and not result.error:
             self.analysis_cache[key] = (
                 time.monotonic(),
                 result.model_copy(deep=True),
@@ -292,8 +344,13 @@ class RunStore:
             # One portfolio snapshot per run, shared by every ticker's manager
             # prompt and risk gate (instead of one fetch per ticker), plus one
             # price-history fetch per held ticker for the concentration gate.
-            portfolio_summary = await fetch_portfolio_summary()
-            held_closes = await fetch_held_closes(portfolio_summary)
+            # Incognito never touches the broker: market data only.
+            if run.incognito:
+                portfolio_summary = None
+                held_closes = {}
+            else:
+                portfolio_summary = await fetch_portfolio_summary()
+                held_closes = await fetch_held_closes(portfolio_summary)
 
             if not run.cancel_requested:
                 async def analyze_one(ticker: str) -> StockAnalysis:
@@ -338,7 +395,8 @@ class RunStore:
             run.status = "cancelled"
             run.error = None
         run.completed_at = time.time()
-        await self._persist(run)
+        if not run.incognito:
+            await self._persist(run)
         await run.emit(
             "analysis_completed",
             {

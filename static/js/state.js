@@ -6,6 +6,8 @@ export const state = {
   finishing: false,
   es: null,
   runId: null,
+  incognito: false, // toggle state: applies to the next run
+  runIncognito: false, // the current/last run's mode, frozen at start
   tickers: new Map(),
   runStartedAtMs: null,
   timer: null,

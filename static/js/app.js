@@ -1,12 +1,13 @@
 /* BetterTradingAgents - analysis screen entry point.
    Wires the DOM and boots recovery / rerun, then hands off to run.js. */
 
-import { ADVANCED_OPEN_KEY, CLIENT_ID_KEY, DEPTH_KEY, OUTLOOK_KEY } from "./constants.js?v=11";
-import { setDepth, setOutlook, updateAdvancedSummary, updateDepthLabels, wireRadioGroups } from "./options.js?v=11";
-import { state } from "./state.js?v=11";
-import { addTickerTags, analyzeAnother, removeTickerTag, renderTickerTags } from "./tickers.js?v=11";
-import { applyRerunParams, cancelRun, feelingLucky, restoreSavedRun, startAnalysis } from "./run.js?v=11";
-import { $, getClientId } from "./util.js?v=11";
+import { ADVANCED_OPEN_KEY, CLIENT_ID_KEY, DEPTH_KEY, OUTLOOK_KEY } from "./constants.js?v=12";
+import { setDepth, setIncognito, setOutlook, updateAdvancedSummary, updateDepthLabels, wireRadioGroups } from "./options.js?v=12";
+import { downloadReport } from "./report.js?v=12";
+import { state } from "./state.js?v=12";
+import { addTickerTags, analyzeAnother, removeTickerTag, renderTickerTags } from "./tickers.js?v=12";
+import { applyRerunParams, cancelRun, feelingLucky, restoreSavedRun, startAnalysis } from "./run.js?v=12";
+import { $, getClientId } from "./util.js?v=12";
 
 document.addEventListener("DOMContentLoaded", async () => {
   $("analyze-btn").addEventListener("click", () => startAnalysis());
@@ -14,6 +15,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("analyze-another-btn").addEventListener("click", () => analyzeAnother());
   $("run-again-btn").addEventListener("click", () => { if (!state.running && !state.discovering) startAnalysis(); });
   $("cancel-btn").addEventListener("click", () => cancelRun());
+  $("incognito-toggle").addEventListener("change", () => setIncognito($("incognito-toggle").checked));
+  $("download-report-btn").addEventListener("click", () => downloadReport());
+  // Closing (or refreshing) the page forgets the incognito run server-side.
+  window.addEventListener("pagehide", () => {
+    if (state.runIncognito && state.runId && navigator.sendBeacon) {
+      navigator.sendBeacon(`/api/runs/${encodeURIComponent(state.runId)}/discard`);
+    }
+  });
   $("add-ticker-btn").addEventListener("click", () => addTickerTags($("ticker-input").value));
   $("ticker-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {

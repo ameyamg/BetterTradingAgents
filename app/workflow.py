@@ -599,8 +599,12 @@ async def fetch_past_decisions(ticker: str) -> dict | None:
         return None
 
 
-def _portfolio_context(summary: PortfolioSummary | None) -> list[dict] | str:
+def _portfolio_context(
+    summary: PortfolioSummary | None, incognito: bool = False
+) -> list[dict] | str:
     """Compact view of open positions for the manager prompt."""
+    if incognito:
+        return "NOT SHARED - incognito run: no portfolio access"
     if summary is None:
         return "UNAVAILABLE - portfolio lookup failed"
     if not summary.positions:
@@ -680,6 +684,7 @@ async def analyze_ticker(
     exclude_analysts: tuple[str, ...] | list[str] = (),
     held_closes: dict[str, list[float]] | None = None,
     previous: PreviousCall | None = None,
+    incognito: bool = False,
 ) -> StockAnalysis:
     """Full 3-stage workflow for one ticker.
 
@@ -700,10 +705,15 @@ async def analyze_ticker(
     concentration gate's correlation input); when omitted it is fetched here.
     `previous` is the earlier completed call this one is compared against for
     the deterministic `What changed` summary (P1.5); backtests pass none.
+    `incognito` runs market-only like a live run but without any private
+    context: no portfolio fetch, no decision-memory lookup or recording. It
+    keeps live token streaming (unlike backtests).
     """
     started = time.perf_counter()
     await emit("ticker_started", {"ticker": ticker})
-    logger.info("[analysis] Starting %s", ticker)
+    # Incognito logs stay anonymous: which ticker was analyzed is part of the
+    # report the user may be trying not to leave behind.
+    logger.info("[analysis] Starting %s", "an incognito ticker" if incognito else ticker)
 
     if market_data is not None:
         market = market_data
@@ -953,8 +963,13 @@ async def analyze_ticker(
 
     # Stage 3: portfolio manager (sees existing holdings so decisions account
     # for exposure already taken; the debate transcript shows how the final
-    # positions were reached). Backtest replay skips live context entirely.
-    if live_context:
+    # positions were reached). Backtest replay skips live context entirely;
+    # incognito is live but private-blind: no portfolio, no decision memory,
+    # on either side (read or write).
+    if incognito:
+        portfolio_summ = None
+        past = {"past_decisions": [], "cross_ticker_lessons": []}
+    elif live_context:
         portfolio_summ = (
             portfolio_summary
             if portfolio_summary is not None
@@ -1008,7 +1023,7 @@ async def analyze_ticker(
             "bear_round_1": bear_data,
             "judge": judge_data,
         },
-        "current_portfolio": _portfolio_context(portfolio_summ),
+        "current_portfolio": _portfolio_context(portfolio_summ, incognito),
         "past_decisions": past_decisions_ctx,
         "cross_ticker_lessons": cross_lessons_ctx,
     }
@@ -1034,7 +1049,10 @@ async def analyze_ticker(
             final.would_upgrade_if,
             final.would_downgrade_if,
         )
-        logger.info("[manager] %s %s %.0f%%", ticker, decision, confidence * 100)
+        if incognito:
+            logger.info("[manager] incognito call made at %.0f%% confidence", confidence * 100)
+        else:
+            logger.info("[manager] %s %s %.0f%%", ticker, decision, confidence * 100)
     else:
         decision, confidence = "HOLD", 0.0
         summary = "Portfolio manager failed - defaulting to HOLD with no conviction."
@@ -1061,6 +1079,7 @@ async def analyze_ticker(
             vol_ann_pct=vol_ann_pct,
             portfolio=portfolio_summ,
             forecast_change_pct=forecast_change_pct,
+            incognito=incognito,
         )
     else:
         risk_flags = ["portfolio manager failed - defaulted to HOLD"]
@@ -1151,17 +1170,21 @@ async def analyze_ticker(
         ),
     )
     logger.info(
-        "[analysis] %s completed in %.1fs (%s)", ticker, analysis.duration_s, decision
+        "[analysis] %s completed in %.1fs%s",
+        "an incognito ticker" if incognito else ticker,
+        analysis.duration_s,
+        "" if incognito else f" ({decision})",
     )
     changes.attach(analysis, previous)
     # Record the decision for future reflection (ROADMAP 1.1) with its
     # calibration provenance (P1.1). A failure here must never surface to the
     # user or block the result. Backtest replays never write - they are not
-    # live decisions. A manager output whose decision did not parse exactly
+    # live decisions; incognito runs never write either - they must leave no
+    # trace. A manager output whose decision did not parse exactly
     # (P2.9) is not a real call either: it must not enter the track record as
     # a phantom HOLD.
     manager_parsed = mgr_data is None or manager.parse_decision(mgr_data) is not None
-    if analysis.error is None and live_context and manager_parsed:
+    if analysis.error is None and live_context and not incognito and manager_parsed:
         try:
             from app import calibration
             from app import memory

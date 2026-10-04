@@ -1,8 +1,8 @@
 /* Ticker tag input plus the post-run retry / analyze-another actions. */
 
-import { TICKER_PATTERN } from "./constants.js?v=11";
-import { state } from "./state.js?v=11";
-import { $, escapeAttr, escapeHtml, hideError, showToast, showError } from "./util.js?v=11";
+import { TICKER_PATTERN } from "./constants.js?v=12";
+import { state } from "./state.js?v=12";
+import { $, escapeAttr, escapeHtml, hideError, showToast, showError } from "./util.js?v=12";
 
 export function addTickerTags(raw) {
   const parts = String(raw || "")

@@ -12,7 +12,7 @@
   <link rel="icon" type="image/png" href="/static/favicon.png?v=2">
   <link rel="apple-touch-icon" href="/static/favicon.png?v=2">
   <link rel="stylesheet" href="/static/css/base.css?v=6">
-  <link rel="stylesheet" href="/static/css/analysis.css?v=11">
+  <link rel="stylesheet" href="/static/css/analysis.css?v=12">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
@@ -29,6 +29,7 @@
       </div>
       <nav aria-label="Primary navigation">
         <span id="mode-chip" class="chip hidden" aria-label="Mock mode: agents use rule-based fallbacks">mock mode</span>
+        <span id="incognito-chip" class="chip incognito hidden" aria-label="Incognito mode on: market-only analysis, nothing saved">incognito</span>
         <a href="/" class="nav-link active" aria-current="page">Home</a>
         <a href="/history" class="nav-link">History</a>
         <a href="/portfolio" class="nav-link">Trades</a>
@@ -55,6 +56,14 @@
         <button class="chip-btn" type="button" data-tickers="MSFT, AAPL">MSFT, AAPL</button>
         <button class="chip-btn" type="button" data-tickers="NVDA, AMD, META">NVDA, AMD, META</button>
         <button class="chip-btn" type="button" data-tickers="TSLA">TSLA</button>
+      </div>
+      <div class="incognito-row">
+        <label class="incognito-toggle">
+          <input type="checkbox" id="incognito-toggle">
+          <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2.5 6.5h11"/><path d="M4.2 6.5c.2-2.6 1.8-4.2 3.8-4.2s3.6 1.6 3.8 4.2"/><circle cx="5" cy="10" r="2.2"/><circle cx="11" cy="10" r="2.2"/><path d="M7.2 10h1.6"/></svg>
+          Incognito mode
+        </label>
+        <span class="muted">Market-only test run: no portfolio access, nothing saved, no trading. Download the report or chat with the manager to keep digging.</span>
       </div>
       <details class="advanced-options" id="advanced-options">
         <summary><span class="adv-title">Advanced options</span><span class="adv-summary-values" id="adv-values">Short term · Medium</span><span class="adv-caret" aria-hidden="true"></span></summary>
@@ -123,6 +132,7 @@
     <section id="results-section" class="hidden">
       <div class="section-heading-row">
         <h2 id="results-heading" tabindex="-1">Results</h2>
+        <button id="download-report-btn" class="secondary-btn hidden" type="button">Download report</button>
         <button id="run-again-btn" class="secondary-btn hidden" type="button">Run again</button>
         <button id="analyze-another-btn" class="secondary-btn hidden" type="button">Analyze another</button>
       </div>
@@ -139,6 +149,6 @@
 
   <div id="toast" class="toast hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <script src="/static/js/features.js?v=1"></script>
-  <script type="module" src="/static/js/app.js?v=11"></script>
+  <script type="module" src="/static/js/app.js?v=12"></script>
 </body>
 </html>

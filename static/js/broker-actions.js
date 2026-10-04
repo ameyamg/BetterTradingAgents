@@ -2,7 +2,7 @@
    fetch per page load; the inline review step shows what a person needs to
    check before committing, and the server re-validates everything anyway. */
 
-import { $, escapeAttr, escapeHtml, fmtUsd, formatDateTime } from "./util.js?v=11";
+import { $, escapeAttr, escapeHtml, fmtUsd, formatDateTime } from "./util.js?v=12";
 
 let infoPromise = null;
 let info = { status: null, positions: [] };
@@ -82,7 +82,7 @@ export async function attachPaperOrder(actionsEl, analysis, runId) {
         <span>I reviewed this order (symbol, side, size)</span>
       </label>
       <div class="add-row">
-        <button class="add-btn" id="paper-place-${escapeAttr(ticker)}" type="button" disabled>Place paper order</button>
+        <button class="add-btn paper-place" id="paper-place-${escapeAttr(ticker)}" type="button" disabled>Place paper order</button>
         <span class="muted">Simulated fills; not live-trading proof</span>
       </div>
       <p class="paper-status hidden" id="paper-status-${escapeAttr(ticker)}" role="status" aria-live="polite"></p>
@@ -91,8 +91,11 @@ export async function attachPaperOrder(actionsEl, analysis, runId) {
   // a paper order first; the demo-portfolio add keeps its explicit demo label.
   actionsEl.prepend(panel);
 
-  const openBtn = $(`paper-open-${ticker}`);
-  const reviewEl = $(`paper-review-${ticker}`);
+  // Scope lookups to the panel: the result card can be re-rendered while the
+  // broker fetches above were in flight, which detaches this panel from the
+  // document and breaks document-wide getElementById lookups.
+  const openBtn = panel.querySelector(".paper-open-btn");
+  const reviewEl = panel.querySelector(".paper-review");
   openBtn.addEventListener("click", () => {
     const show = reviewEl.classList.contains("hidden");
     reviewEl.classList.toggle("hidden", !show);
@@ -100,8 +103,8 @@ export async function attachPaperOrder(actionsEl, analysis, runId) {
     if (show) loadAccountFacts(ticker, analysis);
   });
 
-  const confirmBox = $(`paper-confirm-${ticker}`);
-  const placeBtn = $(`paper-place-${ticker}`);
+  const confirmBox = panel.querySelector(".paper-confirm input");
+  const placeBtn = panel.querySelector(".paper-place");
   confirmBox.addEventListener("change", () => {
     placeBtn.disabled = !confirmBox.checked;
   });
@@ -128,6 +131,7 @@ async function loadAccountFacts(ticker, analysis) {
 async function placePaperOrder(ticker, analysis, runId) {
   const statusEl = $(`paper-status-${ticker}`);
   const placeBtn = $(`paper-place-${ticker}`);
+  if (!statusEl || !placeBtn) return; // the card was re-rendered mid-submit
   const notional = Number($(`paper-notional-${ticker}`)?.value || 0);
   statusEl.classList.remove("hidden");
   statusEl.textContent = "Submitting…";
