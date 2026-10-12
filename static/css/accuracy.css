@@ -63,3 +63,34 @@
 @media (max-width: 900px) {
   .accuracy-aggregates { grid-template-columns: 1fr; }
 }
+
+/* ---------- visuals: per-$10k bars + per-call dispersion ---------- */
+.accuracy-visuals { margin: 0 0 14px; display: grid; gap: 12px; }
+.per-signal-bars {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--panel); padding: 13px 16px; display: grid; gap: 9px;
+}
+.signal-bar-row { display: grid; grid-template-columns: 150px 1fr 90px; align-items: center; gap: 12px; font-size: 12.5px; }
+.signal-bar-label { color: var(--muted); }
+.signal-bar-track { position: relative; height: 14px; background: rgba(255, 255, 255, 0.04); border-radius: var(--r-pill); }
+.signal-bar-track::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--border-strong); }
+.signal-bar-fill { position: absolute; top: 0; bottom: 0; border-radius: var(--r-pill); }
+.signal-bar-fill.right { left: 50%; }
+.signal-bar-fill.left { right: 50%; }
+.bar-follow { background: rgba(34, 197, 94, 0.55); }
+.bar-buy { background: rgba(255, 255, 255, 0.22); }
+.bar-spy { background: rgba(122, 184, 255, 0.5); }
+.signal-bar-value { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dispersion {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--panel); padding: 13px 16px;
+}
+.dispersion-title { margin: 0 0 8px; color: var(--text); font-size: 13px; }
+.dispersion-title small { color: var(--muted); }
+.dispersion svg { display: block; width: 100%; height: auto; }
+.dispersion .dot-right { fill: var(--ok); }
+.dispersion .dot-wrong { fill: var(--danger); }
+.dispersion .dot-neutral { fill: var(--muted); }
+@media (max-width: 620px) {
+  .signal-bar-row { grid-template-columns: 112px 1fr 78px; gap: 8px; }
+}

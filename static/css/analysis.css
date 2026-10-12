@@ -533,7 +533,8 @@
 .chart-analysis { fill: var(--warn); }
 .chart-forecast { stroke: var(--info); stroke-width: 2; stroke-dasharray: 5 4; fill: none; }
 .chart-forecast-dot { fill: var(--info); }
-.chart-label { fill: var(--muted); font-size: 10px; font-family: var(--font); }
+.chart-area { fill: rgba(16, 201, 115, 0.07); }
+.chart-band { fill: rgba(122, 184, 255, 0.1); }
 .chart-summary { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
 
 /* ---------- per-ticker manager chat ---------- */

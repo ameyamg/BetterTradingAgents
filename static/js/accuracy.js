@@ -36,6 +36,72 @@ function pct(value, digits = 1) {
   return `${value >= 0 ? "+" : ""}${Number(value).toFixed(digits)}%`;
 }
 
+/* Visual companions to the per-signal line and the table: the same numbers
+   the script prints, drawn as zero-centred bars plus one dot per graded call.
+   Everything is also stated in text (labels, values, table below), so the
+   charts are never the only path to the facts. */
+function renderVisuals(report) {
+  const host = $("accuracy-visuals");
+  const per = report.per_signal || {};
+  const graded = report.rows.filter((row) => row.alpha_vs_spy_pct != null);
+  if (!per.n || graded.length === 0) {
+    host.classList.add("hidden");
+    host.innerHTML = "";
+    return;
+  }
+  host.classList.remove("hidden");
+
+  const bars = [
+    ["Following the calls", per.follow_calls_pct, "bar-follow"],
+    ["Always-buy", per.always_buy_pct, "bar-buy"],
+    ["SPY", per.spy_pct, "bar-spy"],
+  ].filter(([, value]) => value != null);
+  const maxAbs = Math.max(...bars.map(([, value]) => Math.abs(value)), 0.01);
+  const barsHtml = bars.map(([label, value, cls]) => {
+    const width = (Math.abs(value) / maxAbs) * 50;
+    const side = value >= 0 ? "right" : "left";
+    return `<div class="signal-bar-row">
+      <span class="signal-bar-label">${label}</span>
+      <span class="signal-bar-track"><span class="signal-bar-fill ${cls} ${side}" style="width:${width.toFixed(1)}%"></span></span>
+      <span class="signal-bar-value ${value >= 0 ? "pnl-green" : "pnl-red"}">${money(value)}</span>
+    </div>`;
+  }).join("");
+
+  const lanes = ["BUY", "HOLD", "SELL"];
+  const W = Math.max(340, Math.round(host.clientWidth || 720) - 34);
+  const laneH = 30;
+  const H = lanes.length * laneH + 24;
+  const left = 52;
+  const right = 18;
+  const domain = Math.max(10, ...graded.map((row) => Math.abs(row.alpha_vs_spy_pct)));
+  const x = (value) => left + ((value + domain) / (2 * domain)) * (W - left - right);
+  const laneY = (decision) => 16 + Math.max(0, lanes.indexOf(decision)) * laneH;
+  const counts = { right: 0, wrong: 0, neutral: 0 };
+  graded.forEach((row) => { counts[row.verdict] = (counts[row.verdict] || 0) + 1; });
+  const dots = graded.map((row) => {
+    const cx = x(Math.max(-domain, Math.min(domain, row.alpha_vs_spy_pct)));
+    const cls = row.verdict === "right" ? "dot-right" : row.verdict === "wrong" ? "dot-wrong" : "dot-neutral";
+    const alpha = `${row.alpha_vs_spy_pct >= 0 ? "+" : ""}${Number(row.alpha_vs_spy_pct).toFixed(1)}%`;
+    return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${laneY(row.decision)}" r="5"><title>${escapeHtml(row.ticker)} ${escapeHtml(row.date)} · alpha ${alpha} · ${row.verdict}</title></circle>`;
+  }).join("");
+  const laneLabels = lanes.map((key) => `<text class="chart-label" x="6" y="${laneY(key) + 4}" text-anchor="start">${key}</text>`).join("");
+  const ticks = [-domain, 0, domain].map((value) =>
+    `<text class="chart-label" x="${x(value).toFixed(1)}" y="${H - 6}" text-anchor="middle">${value >= 0 ? "+" : ""}${value.toFixed(0)}%</text>`
+  ).join("");
+
+  host.innerHTML = `
+    <div class="per-signal-bars" role="img" aria-label="Mean outcome per $10,000 signal: following the calls ${money(per.follow_calls_pct)}, always-buy ${money(per.always_buy_pct)}, SPY ${money(per.spy_pct)}">${barsHtml}</div>
+    <div class="dispersion">
+      <p class="dispersion-title">Every graded call, alpha vs SPY <small>(${counts.right} right · ${counts.wrong} wrong · ${counts.neutral} neutral over ${graded.length} graded windows)</small></p>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="One dot per graded call, alpha versus SPY per call; hover for the ticker and date. Listed in the table below.">
+        <line class="chart-zero" x1="${x(0).toFixed(1)}" y1="8" x2="${x(0).toFixed(1)}" y2="${H - 18}"></line>
+        ${laneLabels}
+        ${ticks}
+        ${dots}
+      </svg>
+    </div>`;
+}
+
 function renderAggregates(report) {
   $("accuracy-aggregates").innerHTML = report.by_decision
     .filter((group) => group.n > 0)
@@ -86,6 +152,7 @@ function render(report) {
     node.textContent = `${report.horizon_days}-day`;
   });
   renderAggregates(report);
+  renderVisuals(report);
   renderRows(report);
   $("accuracy-empty").classList.toggle("hidden", report.graded > 0);
 

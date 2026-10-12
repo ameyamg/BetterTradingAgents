@@ -57,9 +57,12 @@
 }
 .cancel-btn:hover { background: rgba(244, 88, 107, 0.1); }
 
-.equity-chart { margin: 4px 0 6px; }
-.equity-chart svg { display: block; width: 100%; height: 130px; }
+.equity-chart { position: relative; margin: 4px 0 6px; }
+.equity-chart svg { display: block; width: 100%; height: auto; }
 .equity-chart .poly { fill: none; stroke: var(--ok); stroke-width: 2; }
 .equity-chart .baseline { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; stroke-dasharray: 4 4; }
+.equity-chart .spy-line { fill: none; stroke: var(--info); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.85; }
+.equity-chart .chart-area { fill: rgba(16, 201, 115, 0.07); }
+.equity-chart .chart-hover-dot { fill: var(--ok); }
 .equity-table-holder summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .equity-table-holder table { margin-top: 8px; }

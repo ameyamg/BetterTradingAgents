@@ -247,11 +247,12 @@ css = "\n".join(path.read_text(encoding="utf-8") for path in sorted((root / "sta
 
 for token in ("signalSplit", "splitLabel", "gateLine", "gateChanged", "downgradeFlag",
               "staleInfo", "coverageInfo", "dataAgeHours", "risk-adjusted",
-              "Manager: ", "Analyst coverage", "Conditions for a different call",
-              "entry.cached", "Data age", "Horizon"):
+              "Manager: ", "Analyst coverage", "What would change this call",
+              "entry.cached", "Data age", "Horizon", "summary-verdict", "call-read"):
     assert token in js, f"app.js missing {token}"
 assert 'type="module" src="/static/js/app.js' in html
-for token in (".gate-banner", ".gate-chip", ".gate-line", ".manager-conditions"):
+for token in (".gate-banner", ".gate-chip", ".gate-line", ".manager-conditions",
+              ".call-read", ".summary-verdict", ".condition-cols"):
     assert token in css, f"style.css missing {token}"
 
 # The expanded brief follows one reading order: summary + risk changes (brief),

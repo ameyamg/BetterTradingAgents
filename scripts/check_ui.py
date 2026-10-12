@@ -61,6 +61,15 @@ for folder, pattern in ((STATIC, "*.html"), (STATIC / "js", "*.js"), (STATIC / "
             f"{path.name} carries a manual ?v= stamp; caching is handled by no-cache + ETag"
 print("no manual ?v= stamps OK")
 
+# ---- design tokens must resolve: no self-referential definitions ---------------
+# A color sweep once rewrote --ok: #6fe0a0 into --ok: var(--ok), silently
+# invalidating every var(--ok) user (stroke: none, colors fall back).
+for path in sorted((STATIC / "css").glob("*.css")):
+    for match in re.finditer(r"(--[\w-]+):\s*var\((--[\w-]+)\)", path.read_text(encoding="utf-8")):
+        assert match.group(1) != match.group(2), \
+            f"{path.name}: {match.group(1)} references itself and can never resolve"
+print("design tokens resolve OK")
+
 # ---- server-rendered nav: links, active state, chips, feature toggles ----------
 client = TestClient(app, base_url="http://127.0.0.1")
 

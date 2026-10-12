@@ -174,44 +174,163 @@ async function cancelOrder(clientOrderId, ticker) {
 }
 
 /* Small inline SVG polyline; every mark is also stated as text below the chart. */
+/* Equity curve v2: normalized axes with gridlines, a SPY overlay over the
+   same window, and a hover crosshair. The SVG renders at the container's
+   pixel width so labels stay crisp; every value is also listed as text in
+   the details table below, so pointer input is never required. */
+let equityCache = null;
+let equityResizeWired = false;
+
 async function renderEquityCurve() {
   const card = $("equity-card");
   try {
-    const data = await fetch("/api/broker/equity?period=1M")
-      .then((response) => (response.ok ? response.json() : null))
-      .catch(() => null);
+    const [data, spy] = await Promise.all([
+      fetch("/api/broker/equity?period=1M").then((response) => (response.ok ? response.json() : null)).catch(() => null),
+      fetch("/api/price-history/SPY").then((response) => (response.ok ? response.json() : null)).catch(() => null),
+    ]);
     const values = data && data.equity ? data.equity : [];
     if (values.length < 2) {
       card.classList.add("hidden");
       return;
     }
     card.classList.remove("hidden");
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = max - min || 1;
-    const W = 300;
-    const H = 100;
-    const y = (value) => H - ((value - min) / span) * (H - 8) - 4;
-    const points = values.map((value, i) =>
-      `${((i / (values.length - 1)) * W).toFixed(1)},${y(value).toFixed(1)}`
-    );
+    const dates = data.dates || [];
+    // SPY closes matched to the equity dates (carried forward across gaps),
+    // then both series normalized to the same 100 start.
+    const spyByDate = {};
+    ((spy && spy.dates) || []).forEach((day, i) => { spyByDate[day] = (spy.closes || [])[i]; });
+    let carry = null;
+    const spyRaw = dates.map((day) => { if (spyByDate[day] != null) carry = spyByDate[day]; return carry; });
     const first = values[0];
-    const last = values[values.length - 1];
-    $("equity-chart").innerHTML =
-      `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" ` +
-      `aria-label="Paper account equity over the last month; every value is listed below as text">` +
-      `<line class="baseline" x1="0" x2="${W}" y1="${y(first).toFixed(1)}" y2="${y(first).toFixed(1)}"></line>` +
-      `<polyline class="poly" points="${points.join(" ")}"></polyline></svg>`;
-    const changePct = ((last / first - 1) * 100).toFixed(2);
+    const spyFirst = spyRaw.find((v) => v != null);
+    equityCache = {
+      dates,
+      equity: values.map((v) => (v / first) * 100),
+      spy: spyRaw.map((v) => (v == null || spyFirst == null ? null : (v / spyFirst) * 100)),
+      firstValue: first,
+      lastValue: values[values.length - 1],
+    };
+    drawEquityChart();
+    const changePct = ((equityCache.lastValue / first - 1) * 100).toFixed(2);
+    const spyLast = [...equityCache.spy].reverse().find((v) => v != null);
     $("equity-note").textContent =
-      `${data.dates[0]} ${fmt(first)} to ${data.dates[data.dates.length - 1]} ${fmt(last)} ` +
-      `(${changePct >= 0 ? "+" : ""}${changePct}%)`;
-    $("equity-tbody").innerHTML = data.dates
+      `${dates[0]} ${fmt(first)} to ${dates[dates.length - 1]} ${fmt(equityCache.lastValue)} ` +
+      `(${changePct >= 0 ? "+" : ""}${changePct}%)` +
+      (spyLast != null ? ` · SPY ${(spyLast - 100) >= 0 ? "+" : ""}${(spyLast - 100).toFixed(2)}% over the same days` : "");
+    $("equity-tbody").innerHTML = dates
       .map((day, i) => `<tr><td>${esc(day)}</td><td class="num">${fmt(values[i])}</td></tr>`)
       .join("");
+    if (!equityResizeWired) {
+      equityResizeWired = true;
+      let timer = null;
+      window.addEventListener("resize", () => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => { if (equityCache) drawEquityChart(); }, 150);
+      });
+    }
   } catch (_) {
     card.classList.add("hidden");
   }
+}
+
+function drawEquityChart() {
+  const el = $("equity-chart");
+  const { dates, equity, spy } = equityCache;
+  const W = Math.max(320, Math.round(el.clientWidth || 640));
+  const H = 200;
+  const PAD = { top: 14, right: 76, bottom: 24, left: 42 };
+  const innerW = W - PAD.left - PAD.right;
+  const innerH = H - PAD.top - PAD.bottom;
+  const scaled = [...equity, ...spy.filter((v) => v != null)];
+  const lo = Math.min(...scaled);
+  const hi = Math.max(...scaled);
+  const padY = (hi - lo || 1) * 0.12;
+  const min = lo - padY;
+  const max = hi + padY;
+  const x = (i) => PAD.left + (i * innerW) / (dates.length - 1);
+  const y = (v) => PAD.top + innerH - ((v - min) / (max - min)) * innerH;
+
+  const digits = (max - min) < 2 ? 2 : 1;
+  const grid = [];
+  for (let t = 0; t <= 3; t += 1) {
+    const value = max - ((max - min) * t) / 3;
+    const gy = y(value).toFixed(1);
+    grid.push(
+      `<line class="chart-grid" x1="${PAD.left}" y1="${gy}" x2="${(W - PAD.right).toFixed(1)}" y2="${gy}"></line>`,
+      `<text class="chart-label" x="${PAD.left - 6}" y="${(Number(gy) + 3).toFixed(1)}" text-anchor="end">${value.toFixed(digits)}</text>`
+    );
+  }
+  grid.push(
+    `<line class="baseline" x1="${PAD.left}" y1="${y(100).toFixed(1)}" x2="${(W - PAD.right).toFixed(1)}" y2="${y(100).toFixed(1)}"></line>`
+  );
+
+  const mid = Math.floor((dates.length - 1) / 2);
+  const dateLabels = [
+    `<text class="chart-label" x="${PAD.left}" y="${H - 6}" text-anchor="start">${esc(dates[0])}</text>`,
+    `<text class="chart-label" x="${x(mid).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(dates[mid])}</text>`,
+    `<text class="chart-label" x="${(W - PAD.right).toFixed(1)}" y="${H - 6}" text-anchor="end">${esc(dates[dates.length - 1])}</text>`,
+  ];
+
+  const last = dates.length - 1;
+  const eqPts = equity.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const base = (PAD.top + innerH).toFixed(1);
+  const area = `${x(0).toFixed(1)},${base} ${eqPts} ${x(last).toFixed(1)},${base}`;
+  const spyPts = spy.map((v, i) => (v == null ? null : `${x(i).toFixed(1)},${y(v).toFixed(1)}`)).filter(Boolean).join(" ");
+  let spyEndIdx = -1;
+  spy.forEach((v, i) => { if (v != null) spyEndIdx = i; });
+
+  const eqEnd = y(equity[last]);
+  const spyEnd = spyEndIdx >= 0 ? y(spy[spyEndIdx]) : null;
+  const endLabels = [
+    `<text class="chart-label" x="${(W - PAD.right + 6)}" y="${(eqEnd + 3).toFixed(1)}" text-anchor="start">Equity ${equity[last].toFixed(1)}</text>`,
+    spyEnd != null
+      ? `<text class="chart-label" x="${(W - PAD.right + 6)}" y="${(spyEnd + (Math.abs(spyEnd - eqEnd) < 14 ? 15 : 3)).toFixed(1)}" text-anchor="start">SPY ${spy[spyEndIdx].toFixed(1)}</text>`
+      : "",
+  ];
+
+  el.innerHTML = `
+    <svg class="equity-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Paper account equity over the last month versus SPY, both starting at 100. Every value is listed as text below.">
+      ${grid.join("")}
+      ${dateLabels.join("")}
+      <polygon class="chart-area" points="${area}"></polygon>
+      ${spyPts ? `<polyline class="spy-line" points="${spyPts}" fill="none"></polyline>` : ""}
+      <polyline class="poly" points="${eqPts}" fill="none"></polyline>
+      ${endLabels.join("")}
+      <g class="chart-hover" hidden aria-hidden="true">
+        <line class="chart-hover-line" y1="${PAD.top}" y2="${PAD.top + innerH}"></line>
+        <circle class="chart-hover-dot" r="3.5"></circle>
+      </g>
+    </svg>
+    <div class="chart-tip" hidden></div>`;
+  wireEquityHover(el, { dates, equity, spy, x, y, W });
+}
+
+function wireEquityHover(el, { dates, equity, spy, x, y, W }) {
+  const svg = el.querySelector("svg");
+  const hover = el.querySelector(".chart-hover");
+  const line = el.querySelector(".chart-hover-line");
+  const dot = el.querySelector(".chart-hover-dot");
+  const tip = el.querySelector(".chart-tip");
+  svg.addEventListener("mousemove", (event) => {
+    const PAD = { right: 76, left: 42 };
+    const px = event.offsetX;
+    const step = (W - PAD.left - PAD.right) / (dates.length - 1);
+    const i = Math.max(0, Math.min(dates.length - 1, Math.round((px - PAD.left) / step)));
+    line.setAttribute("x1", x(i).toFixed(1));
+    line.setAttribute("x2", x(i).toFixed(1));
+    dot.setAttribute("cx", x(i).toFixed(1));
+    dot.setAttribute("cy", y(equity[i]).toFixed(1));
+    const dollars = (equityCache.firstValue * equity[i]) / 100;
+    const spyText = spy[i] == null ? "SPY n/a" : `SPY ${(spy[i] - 100) >= 0 ? "+" : ""}${(spy[i] - 100).toFixed(2)}%`;
+    tip.textContent = `${dates[i]} · ${fmt(dollars)} (${(equity[i] - 100) >= 0 ? "+" : ""}${(equity[i] - 100).toFixed(2)}%) · ${spyText}`;
+    tip.hidden = false;
+    hover.classList.add("on");
+    tip.style.left = `${Math.min(Math.max(px - 90, 4), W - 230)}px`;
+  });
+  svg.addEventListener("mouseleave", () => {
+    hover.classList.remove("on");
+    tip.hidden = true;
+  });
 }
 
 /* Per filled order: return since fill and alpha vs SPY over the same window. */
