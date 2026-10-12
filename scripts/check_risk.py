@@ -138,6 +138,16 @@ d, c, s, f = risk.evaluate("SELL", 0.9, "NVDA", (A(), A(), A()), 44.9, flat_port
 assert d == "HOLD" and any("noise band" in fl for fl in f), f
 print("forecast SELL veto OK")
 
+# The noise band scales with the outlook horizon: a one-session band is
+# sqrt(5) narrower than the five-day default.
+assert abs(risk.forecast_noise_pct(20.0, 1) - 1.26) < 0.02
+assert (risk.forecast_noise_pct(20.0, 1) < risk.forecast_noise_pct(20.0, 5)
+        < risk.forecast_noise_pct(20.0, 21))
+d, c, s, f = risk.evaluate("BUY", 0.8, "NVDA", (A(), A(), A()), 44.9, flat_portfolio(),
+                           forecast_change_pct=-4.0, horizon_days=1)
+assert d == "HOLD" and any("1-day forecast" in fl for fl in f), f
+print("horizon-scaled band OK: a -4.0% forecast vetoes over one session")
+
 # ---- concentration check (ROADMAP P1.3): correlated holdings = one bet ------
 from app.models import ConcentrationCheck  # noqa: E402
 

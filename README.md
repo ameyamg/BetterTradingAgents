@@ -207,8 +207,9 @@ and `--paired` changes one dimension at a time. The full guide lives in the wiki
 
 ## Live track record
 
-Every completed call is graded 21 days later against real closes: its own return and alpha
-vs SPY. This scorecard is generated, not hand-written:
+Every completed call is graded on its run's outlook horizon (next session for day trades,
+five trading days for short term, about a month for long term) against real closes: its own
+return and alpha vs SPY. This scorecard is generated, not hand-written:
 `uv run python scripts/benchmark.py --markdown` rebuilds it from the local run history.
 
 As of 2026-10-12: 62 live sessions, 59 unique calls, 12 fully graded (37 still inside their

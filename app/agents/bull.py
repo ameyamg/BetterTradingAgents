@@ -55,7 +55,7 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
 Research results from the analysts (a value of null or "FAILED" means that input is unavailable - do not use it):
 {json.dumps(payload, indent=2, default=str)}
 
-Argue the strongest reasonable BUY case from the available evidence: trend, growth, margins, positive news, bullish social sentiment, a favorable 5-day projection. Keep it short and concrete.
+Argue the strongest reasonable BUY case from the available evidence: trend, growth, margins, positive news, bullish social sentiment, a favorable statistical projection. Keep it short and concrete.
 
 Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
 {{"score": <number 0.0-1.0 = how strong the bull case is>, "summary": "<at most 3 sentences>"}}""",

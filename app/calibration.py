@@ -27,14 +27,15 @@ from app.config import settings
 # silently. Old rows keep the version they were recorded with.
 DECISION_POLICY_VERSION = "2026-10-e"
 
-def success_event() -> str:
+def success_event(horizon_days: int | None = None) -> str:
     """Frozen success event for ManagerResult.probability_beat_spy, built from
-    the horizon configured NOW (live-apply can change it after import), so the
-    text never silently disagrees with the setting. Changing this definition
-    invalidates every recorded probability; introduce a new field instead."""
+    the run's outlook horizon (falling back to the configured default, live-
+    applied), so the text never disagrees with how the call grades. Changing
+    this definition invalidates every recorded probability; introduce a new
+    field instead."""
     return (
         "the call's direction beats SPY over the "
-        f"{settings.memory_horizon_days}-day decision-memory horizon: "
+        f"{horizon_days or settings.memory_horizon_days}-day decision-memory horizon: "
         "alpha_vs_spy_pct > 0 for BUY, alpha_vs_spy_pct < 0 for SELL"
     )
 

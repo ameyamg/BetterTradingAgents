@@ -42,6 +42,13 @@ const REPORT_CSS = `
   @media print { body { padding: 0; background: #fff; } section.card { break-inside: avoid; } }
 `;
 
+function forecastHorizonLabel(analysis) {
+  const horizon = Number(analysis.forecast_horizon_days) || 5;
+  if (horizon === 1) return "Next-session forecast";
+  if (horizon >= 21) return "1-month forecast";
+  return `${horizon}-day forecast`;
+}
+
 function decisionBadge(decision) {
   return `<span class="badge ${escapeAttr(decision || "HOLD")}">${escapeHtml(decision || "HOLD")}</span>`;
 }
@@ -57,7 +64,7 @@ function money(value) {
 function tickerSection(a) {
   const facts = [
     ["Price", a.price != null ? `$${Number(a.price).toFixed(2)}` : "n/a"],
-    ["5-day forecast", a.forecast_price_5d != null
+    [forecastHorizonLabel(a), a.forecast_price_5d != null
       ? `$${Number(a.forecast_price_5d).toFixed(2)} (${Number(a.forecast_change_5d_pct) >= 0 ? "+" : ""}${Number(a.forecast_change_5d_pct).toFixed(2)}%)`
       : "n/a"],
     ["Evidence strength", `${pct(a.confidence)} (${a.confidence >= 0.7 ? "strong" : a.confidence >= 0.5 ? "moderate" : "low"})`],

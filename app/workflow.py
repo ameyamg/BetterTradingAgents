@@ -37,7 +37,7 @@ from app.models import (
     SourceReference,
     StockAnalysis,
 )
-from app.outlook import DEFAULT_OUTLOOK, user_context
+from app.outlook import DEFAULT_OUTLOOK, horizon_days as outlook_horizon, user_context
 from app.tools.indicators import compute_indicators, historical_forecast
 from app.tools.market_data import (
     MarketData,
@@ -735,6 +735,8 @@ async def analyze_ticker(
         market.closes, market.highs, market.lows, market.volumes
     )
     prof = depth_profile(depth)
+    # The run's horizon drives the forecast, the risk band, and grading.
+    run_horizon = outlook_horizon(outlook)
     # Backtests can drop researchers whose data has no point-in-time source
     # (P1.2: fundamentals); the exclusion applies to prompts, events, and the
     # data-quality coverage report alike.
@@ -751,13 +753,13 @@ async def analyze_ticker(
     local_forecast: dict | None = None
     timegpt_forecast: dict | None = None
     if "forecast" in research:
-        local_forecast = historical_forecast(market.closes)
+        local_forecast = historical_forecast(market.closes, run_horizon)
         # Hosted chain: TimeGPT while its quota allows, then TSFM.ai
         # (Chronos-2), then the local trend model. Any failure falls through;
         # the payload key keeps its historical name for saved-run parity.
-        hosted_forecast = await get_timegpt_forecast(market.closes)
+        hosted_forecast = await get_timegpt_forecast(market.closes, run_horizon)
         if hosted_forecast is None:
-            hosted_forecast = await get_tsfm_forecast(market.closes)
+            hosted_forecast = await get_tsfm_forecast(market.closes, run_horizon)
         if hosted_forecast:
             indicators.update(hosted_forecast)
             market.sources["forecast"] = (
@@ -783,15 +785,18 @@ async def analyze_ticker(
     token_totals: dict[str, int] = {}
     role_usage: dict[str, dict] = {}
     user_ctx = user_context(outlook)
-    noise_band_5d = risk.forecast_noise_pct(indicators.get("volatility_annualized_pct"))
+    noise_band_5d = risk.forecast_noise_pct(
+        indicators.get("volatility_annualized_pct"), run_horizon
+    )
     forecast_payload = {
         "price": market.price,
         "history_days": len(market.closes),
         "hosted_forecast": hosted_forecast,
         "local_trend_forecast": local_forecast,
-        # Precomputed so the analyst quotes the same 5-day band the risk gate
-        # uses, instead of reading the annualized volatility as a 5-day band.
-        "noise_band_5d_pct": round(noise_band_5d, 2) if noise_band_5d is not None else None,
+        # Precomputed so the analyst quotes the same band the risk gate uses
+        # for this outlook's horizon, not the raw annualized volatility.
+        "noise_band_pct": round(noise_band_5d, 2) if noise_band_5d is not None else None,
+        "horizon_days": run_horizon,
         "user_context": user_ctx,
         "trend_context": {
             key: indicators.get(key)
@@ -1003,12 +1008,13 @@ async def analyze_ticker(
         if past is None
         else (past["cross_ticker_lessons"] or "none yet - no graded decisions on other tickers")
     )
-    # Standardize the forecast against the stock's own 5-day noise band so the
-    # manager and the risk gate read the same number (see app.risk).
+    # Standardize the forecast against the stock's own noise band for this
+    # run's horizon, so the manager and the risk gate read the same number.
+    # (see app.risk)
     vol_ann_pct = indicators.get("volatility_annualized_pct")
     forecast_change_pct = indicators.get("forecast_change_5d_pct")
-    forecast_band_pct = risk.forecast_noise_pct(vol_ann_pct)
-    forecast_z_value = risk.forecast_z(forecast_change_pct, vol_ann_pct)
+    forecast_band_pct = risk.forecast_noise_pct(vol_ann_pct, run_horizon)
+    forecast_z_value = risk.forecast_z(forecast_change_pct, vol_ann_pct, run_horizon)
     forecast_assessment = {
         "forecast_change_5d_pct": forecast_change_pct,
         "noise_band_1sigma_pct": None
@@ -1105,6 +1111,7 @@ async def analyze_ticker(
             portfolio=portfolio_summ,
             forecast_change_pct=forecast_change_pct,
             incognito=incognito,
+            horizon_days=run_horizon,
         )
     else:
         risk_flags = ["portfolio manager failed - defaulted to HOLD"]
@@ -1144,6 +1151,7 @@ async def analyze_ticker(
         forecast_change_5d_pct=indicators.get("forecast_change_5d_pct"),
         forecast_trend_r2=indicators.get("forecast_trend_r2"),
         forecast_method=indicators.get("forecast_method", ""),
+        forecast_horizon_days=indicators.get("forecast_horizon_days"),
         forecast_band_pct=None if forecast_band_pct is None else round(forecast_band_pct, 2),
         forecast_z=None if forecast_z_value is None else round(forecast_z_value, 2),
         decision=decision,
@@ -1220,11 +1228,12 @@ async def analyze_ticker(
                 provenance={
                     "outlook": outlook,
                     "depth": depth,
+                    "horizon_days": run_horizon,
                     "model": settings.llm_for("manager")["model"]
                     if settings.llm_configured
                     else "mock",
                     "policy_version": calibration.DECISION_POLICY_VERSION,
-                    "success_event": calibration.success_event(),
+                    "success_event": calibration.success_event(run_horizon),
                 },
             )
         except Exception as exc:  # noqa: BLE001 - best-effort like the portfolio

@@ -181,7 +181,8 @@ class StockAnalysis(BaseModel):
     forecast_change_5d_pct: float | None = None
     forecast_trend_r2: float | None = None
     forecast_method: str = ""
-    forecast_band_pct: float | None = None  # +/-1 sigma 5-day noise band, in %
+    forecast_horizon_days: int | None = None  # run outlook horizon: 1, 5, or 21 trading days
+    forecast_band_pct: float | None = None  # +/-1 sigma noise band for the run's horizon, in %
     forecast_z: float | None = None  # forecast change / noise band
     decision: Decision = "HOLD"
     confidence: float = 0.0

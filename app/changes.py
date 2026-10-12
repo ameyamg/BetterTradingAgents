@@ -111,10 +111,12 @@ def what_changed(current: StockAnalysis, previous: PreviousCall) -> list[str]:
         lines.append(f"Analyst signals unchanged ({detail})" if detail else "Analyst signals unchanged")
 
     forecast = None if current.error else current.forecast_price_5d
+    horizon = current.forecast_horizon_days or 5
+    label = "next-session forecast" if horizon == 1 else f"{horizon}-day forecast"
     if forecast == previous.forecast_price_5d:
-        lines.append(f"5-day forecast unchanged ({_money(forecast)})")
+        lines.append(f"{label} unchanged ({_money(forecast)})")
     else:
-        lines.append(f"5-day forecast: {_money(previous.forecast_price_5d)} -> {_money(forecast)}")
+        lines.append(f"{label}: {_money(previous.forecast_price_5d)} -> {_money(forecast)}")
 
     age = current.data_quality.age_hours
     lines.append(

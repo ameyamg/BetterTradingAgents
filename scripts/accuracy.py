@@ -32,10 +32,9 @@ def main(report: dict | None = None) -> None:
     # without nesting asyncio.run.
     if report is None:
         report = asyncio.run(accuracy_report())
-    horizon = report["horizon_days"]
     print(
         f"{report['graded']} graded unique calls · {report['pending']} pending "
-        f"(inside or beyond the {horizon}-day window)"
+        "(inside or beyond their grading window)"
     )
     print()
     for group in report["by_decision"]:

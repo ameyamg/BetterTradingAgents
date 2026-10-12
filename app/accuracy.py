@@ -45,6 +45,7 @@ def _row_payload(row: dict) -> dict:
         "spy_return_pct": row["spy_return_pct"],
         "alpha_vs_spy_pct": row["alpha_vs_spy_pct"],
         "window_days": row["window_days"],
+        "horizon_days": row["horizon_days"] or settings.memory_horizon_days,
         "verdict": memory.verdict(
             str(row["decision"]),
             row["realized_return_pct"] or 0.0,
@@ -143,7 +144,9 @@ async def accuracy_report() -> dict:
         except ValueError:
             pending += 1
             continue
-        target = decided + timedelta(days=settings.memory_horizon_days)
+        target = decided + timedelta(
+            days=row["horizon_days"] or settings.memory_horizon_days
+        )
         if target > today:
             pending += 1  # no close on/after the target can exist yet
             continue

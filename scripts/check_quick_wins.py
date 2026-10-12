@@ -12,6 +12,7 @@ os.environ["DB_PATH"] = str(_TMP)
 
 from app.tools.indicators import compute_indicators, historical_forecast, macd  # noqa: E402
 from app.tools.market_data import _normalize_timegpt_forecast, _normalize_tsfm_forecast  # noqa: E402
+from app.outlook import horizon_days as outlook_horizon  # noqa: E402
 from app import discovery  # noqa: E402
 from app.discovery import rank_candidates  # noqa: E402
 
@@ -219,6 +220,23 @@ assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "
 assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "tsfm-chronos-2"}}) == "TSFM.ai chronos-2"
 assert forecast_agent._hosted_provider({}) == "the configured hosted provider"
 print("forecast provider label OK")
+
+# Outlook horizons: day trade grades the next session, short term five days,
+# long term about a month; the forecast mock scales its noise band to match.
+assert outlook_horizon("day_trade") == 1 and outlook_horizon("short_term") == 5
+assert outlook_horizon("long_term") == 21 and outlook_horizon("nonsense") == 5
+_daily = historical_forecast(up, 1)
+_weekly = historical_forecast(up, 5)
+assert _daily["forecast_price_5d"] < _weekly["forecast_price_5d"]  # uptrend projects higher later
+_fc_day = forecast_agent.mock("NVDA", {**_fc_payload, "horizon_days": 1,
+                                       "hosted_forecast": {"forecast_change_5d_pct": -2.0,
+                                                            "forecast_method": "tsfm-chronos-2"}})
+assert _fc_day["signal"] == "bearish", _fc_day  # -2% clears the ~1.3% 1-day band
+_fc_week = forecast_agent.mock("NVDA", {**_fc_payload,
+                                        "hosted_forecast": {"forecast_change_5d_pct": -2.0,
+                                                             "forecast_method": "tsfm-chronos-2"}})
+assert _fc_week["signal"] == "neutral", _fc_week  # the same move is noise over 5 days
+print("outlook horizons OK: 1/5/21 days drive the forecast and its noise band")
 
 # ---- workflow imports (catches syntax / import errors everywhere) ----------
 import app.main  # noqa: E402, F401

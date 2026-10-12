@@ -109,6 +109,19 @@ settings.memory_horizon_days = 21
 assert short is not None and short["mature"] is True, short
 assert short["window_days"] == 3 and abs(short["realized_return_pct"] - 2.0) < 0.01, short
 print("short-horizon grading OK: a 1-day weekend window matures on Monday")
+
+# Per-run horizons (outlook-driven grading): a stored horizon_days wins over
+# the settings default, so day-trade calls grade the next session while the
+# default stays 21 days for everything unversioned.
+assert settings.memory_horizon_days == 21
+per_row = memory.compute_outcome(
+    {**we_row, "horizon_days": 1},
+    {D_WE: 100.0, next_monday: 102.0},
+    {D_WE: 400.0, next_monday: 400.0},
+)
+assert per_row is not None and per_row["mature"] is True, per_row
+assert per_row["window_days"] == 3, per_row
+print("per-row horizon OK: a stored 1-day horizon grades without the settings override")
 print("outcome math OK: +10% vs +1% over 21d, decided-today returns None")
 
 

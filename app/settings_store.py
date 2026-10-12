@@ -94,7 +94,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
         "fields": [
             _field("finnhub_api_key", "FINNHUB_API_KEY", "Finnhub API key", secret=True, hint="Profiles, fundamentals, company news; falls back to yfinance"),
             _field("olostep_api_key", "OLOSTEP_API_KEY", "Olostep API key", secret=True, hint="News search and Reddit/StockTwits sentiment"),
-            _field("nixtla_api_key", "NIXTLA_API_KEY", "Nixtla TimeGPT API key", secret=True, hint="5-day forecast; falls back to the local trend model"),
+            _field("nixtla_api_key", "NIXTLA_API_KEY", "Nixtla TimeGPT API key", secret=True, hint="Forecast for the run's outlook horizon; falls back to the local trend model"),
             _field("tsfm_api_key", "TSFM_API_KEY", "TSFM.ai API key", secret=True, hint="Chronos-2 hosted forecast, used when TimeGPT is unavailable; falls back to the local trend model"),
         ],
     },
@@ -128,7 +128,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
         "tab": "Memory",
         "label": "Decision memory",
         "fields": [
-            _field("memory_horizon_days", "MEMORY_HORIZON_DAYS", "Outcome horizon (days)", "int", lo=1, hi=365, hint="Days before a decision's outcome grades", example="21"),
+            _field("memory_horizon_days", "MEMORY_HORIZON_DAYS", "Outcome horizon (days)", "int", lo=1, hi=365, hint="Fallback grading window in days for runs that predate per-outlook horizons", example="21"),
             _field("memory_reflect_with_llm", "MEMORY_REFLECT_WITH_LLM", "LLM reflections", "bool", hint="Off writes deterministic lessons"),
             _field("calibration_min_observations", "CALIBRATION_MIN_OBSERVATIONS", "Min graded calls", "int", lo=1, hi=1000, hint="Track records need this many graded calls", example="30"),
         ],

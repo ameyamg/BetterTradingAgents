@@ -148,9 +148,6 @@ function renderRows(report) {
 }
 
 function render(report) {
-  document.querySelectorAll(".horizon-fill").forEach((node) => {
-    node.textContent = `${report.horizon_days}-day`;
-  });
   renderAggregates(report);
   renderVisuals(report);
   renderRows(report);
@@ -187,7 +184,7 @@ function render(report) {
   const pending = $("accuracy-pending");
   if (report.pending > 0) {
     const plural = report.pending === 1 ? "call is" : "calls are";
-    pending.textContent = `${report.pending} ${plural} still inside the ${report.horizon_days}-day window and not graded yet.`;
+    pending.textContent = `${report.pending} ${plural} still inside their grading window and not graded yet.`;
     pending.classList.remove("hidden");
   } else {
     pending.classList.add("hidden");

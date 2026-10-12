@@ -163,15 +163,16 @@ async def main(markdown: bool) -> None:
     holds = by_type["HOLD"]
     print(f"""## Live track record
 
-Every completed call is graded 21 days later against real closes: its own
-return and alpha vs SPY. This scorecard is generated, not hand-written:
+Every completed call is graded on its run's outlook horizon (next session for
+day trades, five trading days for short term, about a month for long term)
+against real closes: its own return and alpha vs SPY. This scorecard is generated, not hand-written:
 `uv run python scripts/benchmark.py --markdown` rebuilds it from the local
 run history.
 
 As of {today}: {runs} live sessions, {len(decisions)} unique calls,
 {len(matured)} fully graded ({pending} still inside their 21-day window).
 
-| What the market did next (21-day window) | The agent's record |
+| What the market did next (per-call window) | The agent's record |
 |---|---|
 | {len(crashes)} candidates fell more than {-CRASH_PCT:.0f}% ({names(crashes)}) | {len(crashes_avoided)} of {len(crashes)} sidestepped |
 | {sum(holds.values())} HOLD calls | {holds['right']} avoided a {MOVE_EDGE_PCT:.0f}%+ drop, {holds['wrong']} missed a {MOVE_EDGE_PCT:.0f}%+ rally, {holds['neutral']} moved under {MOVE_EDGE_PCT:.0f}% |

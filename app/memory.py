@@ -56,6 +56,7 @@ def _init_db() -> None:
                 spy_return_pct REAL,
                 alpha_vs_spy_pct REAL,
                 window_days REAL,
+                horizon_days REAL,
                 mature INTEGER NOT NULL DEFAULT 0,
                 reflection TEXT
             )
@@ -73,6 +74,7 @@ def _init_db() -> None:
             "manager_probability REAL",
             "policy_version TEXT NOT NULL DEFAULT ''",
             "success_event TEXT NOT NULL DEFAULT ''",
+            "horizon_days REAL",
         ):
             try:
                 connection.execute(f"ALTER TABLE decisions ADD COLUMN {column}")
@@ -107,8 +109,8 @@ def _insert_decision(
                 run_id, ticker, date, decision, confidence, price_at_decision,
                 summary, bull_case, bear_case, outlook, depth, model,
                 manager_decision, manager_confidence, manager_probability,
-                policy_version, success_event
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                policy_version, success_event, horizon_days
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 run_id,
@@ -128,6 +130,7 @@ def _insert_decision(
                 analysis.manager_probability,
                 provenance.get("policy_version", ""),
                 provenance.get("success_event", ""),
+                provenance.get("horizon_days"),
             ),
         )
         return int(cursor.lastrowid)
@@ -215,7 +218,13 @@ def compute_outcome(
         decided = date.fromisoformat(row["date"])
     except ValueError:
         return None
-    horizon = settings.memory_horizon_days
+    # The stored per-run horizon (from the outlook) wins; rows written before
+    # per-outlook horizons fall back to the configured default.
+    try:
+        stored_horizon = row["horizon_days"]
+    except (KeyError, IndexError):
+        stored_horizon = None
+    horizon = int(stored_horizon) if stored_horizon else settings.memory_horizon_days
     target = (decided + timedelta(days=horizon)).isoformat()
 
     entry = close_on_or_before(closes, row["date"])
@@ -406,6 +415,7 @@ def _reflection_row(row: dict, outcome: dict | None, reflection: str | None) -> 
         "spy_return_pct": None if outcome is None else outcome["spy_return_pct"],
         "alpha_vs_spy_pct": None if outcome is None else outcome["alpha_vs_spy_pct"],
         "window_days": None if outcome is None else outcome["window_days"],
+        "horizon_days": row.get("horizon_days") or settings.memory_horizon_days,
         "mature": bool(outcome is not None and outcome["mature"]),
         "reflection": reflection
         or deterministic_reflection(row, outcome),

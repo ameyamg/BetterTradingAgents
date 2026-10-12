@@ -21,7 +21,7 @@ Rules, not an LLM: free, testable, no hallucination surface (wiki Roadmap 1.2).
   before/after exposure. Warning-only: it never changes the decision, and a
   correlation that cannot be computed is reported as unknown, never as
   independent.
-- Forecast check: the 5-day forecast is standardized against the stock's own
+- Forecast check: the forecast is standardized against the stock's own
   volatility (z = forecast / (vol_ann x sqrt(5/252)), the same inverse-vol
   construction as Barroso & Santa-Clara 2015). Beyond -1 sigma a BUY is
   downgraded and a SELL vetoed; past -0.5 sigma the size is halved. Inside
@@ -47,16 +47,22 @@ CORRELATION_THRESHOLD = 0.7  # daily-return correlation above this reads as one 
 MIN_RETURN_OBS = 20  # overlapping daily returns needed for a usable correlation
 
 
-def forecast_noise_pct(vol_ann_pct: float | None) -> float | None:
-    """The +/-1 sigma band for a 5-day move, in percent, from annualized vol."""
+def forecast_noise_pct(
+    vol_ann_pct: float | None, horizon_days: int = FORECAST_HORIZON_DAYS
+) -> float | None:
+    """The +/-1 sigma band for a horizon-day move, in percent, from annualized vol."""
     if vol_ann_pct is None or vol_ann_pct <= 0:
         return None
-    return vol_ann_pct * sqrt(FORECAST_HORIZON_DAYS / 252.0)
+    return vol_ann_pct * sqrt(horizon_days / 252.0)
 
 
-def forecast_z(forecast_change_pct: float | None, vol_ann_pct: float | None) -> float | None:
-    """Forecast change as a multiple of its own 5-day noise band."""
-    band = forecast_noise_pct(vol_ann_pct)
+def forecast_z(
+    forecast_change_pct: float | None,
+    vol_ann_pct: float | None,
+    horizon_days: int = FORECAST_HORIZON_DAYS,
+) -> float | None:
+    """Forecast change as a multiple of its own noise band for the horizon."""
+    band = forecast_noise_pct(vol_ann_pct, horizon_days)
     if band is None or forecast_change_pct is None:
         return None
     return forecast_change_pct / band
@@ -210,6 +216,7 @@ def evaluate(
     portfolio: PortfolioSummary | None,
     forecast_change_pct: float | None = None,
     incognito: bool = False,
+    horizon_days: int = FORECAST_HORIZON_DAYS,
 ) -> tuple[str, float, float | None, list[str]]:
     """Apply the risk gate to a manager decision.
 
@@ -225,13 +232,13 @@ def evaluate(
             f"confidence capped at 50%: {failed}/{len(analysts)} analyst inputs failed"
         )
 
-    z = forecast_z(forecast_change_pct, vol_ann_pct)
-    band = forecast_noise_pct(vol_ann_pct)
+    z = forecast_z(forecast_change_pct, vol_ann_pct, horizon_days)
+    band = forecast_noise_pct(vol_ann_pct, horizon_days)
 
     if decision == "BUY":
         if z is not None and z <= -FORECAST_VETO_Z:
             flags.append(
-                f"downgraded BUY to HOLD: 5-day forecast {forecast_change_pct:.2f}% "
+                f"downgraded BUY to HOLD: {horizon_days}-day forecast {forecast_change_pct:.2f}% "
                 f"is beyond the +/-{band:.1f}% noise band (z={z:.2f})"
             )
             logger.info("[risk] %s BUY downgraded: forecast z=%.2f", ticker, z)
@@ -242,7 +249,7 @@ def evaluate(
         if z is not None and z <= -FORECAST_HALVE_Z:
             size_usd = round(size_usd * 0.5, 2)
             flags.append(
-                f"position size halved: 5-day forecast {forecast_change_pct:.2f}% "
+                f"position size halved: {horizon_days}-day forecast {forecast_change_pct:.2f}% "
                 f"leans past half the noise band (z={z:.2f})"
             )
 
@@ -304,7 +311,7 @@ def evaluate(
 
     if decision == "SELL" and z is not None and z >= FORECAST_VETO_Z:
         flags.append(
-            f"downgraded SELL to HOLD: 5-day forecast {forecast_change_pct:.2f}% "
+            f"downgraded SELL to HOLD: {horizon_days}-day forecast {forecast_change_pct:.2f}% "
             f"is beyond the +/-{band:.1f}% noise band (z={z:.2f})"
         )
         logger.info("[risk] %s SELL downgraded: forecast z=%.2f", ticker, z)
