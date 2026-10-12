@@ -47,8 +47,8 @@ def _fallback_notes(providers: dict[str, str], expected: list[str]) -> list[str]
     """Plain-text notes for inputs that degraded below the configured provider."""
     notes: list[str] = []
     if "forecast" in expected:
-        if providers.get("forecast") == "local" and settings.nixtla_api_key:
-            notes.append("forecast: local model (TimeGPT unavailable)")
+        if providers.get("forecast") == "local" and (settings.nixtla_api_key or settings.tsfm_api_key):
+            notes.append("forecast: local model (hosted forecast unavailable)")
         elif providers.get("forecast") == "none":
             notes.append("forecast: not available")
     if "fundamental" in expected:

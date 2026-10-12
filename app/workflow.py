@@ -44,6 +44,7 @@ from app.tools.market_data import (
     get_market_context,
     get_stock_data,
     get_timegpt_forecast,
+    get_tsfm_forecast,
 )
 
 logger = logging.getLogger("analysis")
@@ -751,10 +752,17 @@ async def analyze_ticker(
     timegpt_forecast: dict | None = None
     if "forecast" in research:
         local_forecast = historical_forecast(market.closes)
-        timegpt_forecast = await get_timegpt_forecast(market.closes)
-        if timegpt_forecast:
-            indicators.update(timegpt_forecast)
-            market.sources["forecast"] = "timegpt"
+        # Hosted chain: TimeGPT while its quota allows, then TSFM.ai
+        # (Chronos-2), then the local trend model. Any failure falls through;
+        # the payload key keeps its historical name for saved-run parity.
+        hosted_forecast = await get_timegpt_forecast(market.closes)
+        if hosted_forecast is None:
+            hosted_forecast = await get_tsfm_forecast(market.closes)
+        if hosted_forecast:
+            indicators.update(hosted_forecast)
+            market.sources["forecast"] = (
+                "timegpt" if hosted_forecast["forecast_method"] == "timegpt-1" else "tsfm"
+            )
         else:
             market.sources["forecast"] = "local"
     else:
@@ -778,7 +786,7 @@ async def analyze_ticker(
     forecast_payload = {
         "price": market.price,
         "history_days": len(market.closes),
-        "timegpt_forecast": timegpt_forecast,
+        "timegpt_forecast": hosted_forecast,
         "local_trend_forecast": local_forecast,
         "user_context": user_ctx,
         "trend_context": {

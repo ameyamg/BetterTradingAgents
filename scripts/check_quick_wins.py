@@ -11,7 +11,7 @@ _TMP = Path(tempfile.mkdtemp()) / "portfolio_test.db"
 os.environ["DB_PATH"] = str(_TMP)
 
 from app.tools.indicators import compute_indicators, historical_forecast, macd  # noqa: E402
-from app.tools.market_data import _normalize_timegpt_forecast  # noqa: E402
+from app.tools.market_data import _normalize_timegpt_forecast, _normalize_tsfm_forecast  # noqa: E402
 from app import discovery  # noqa: E402
 from app.discovery import rank_candidates  # noqa: E402
 
@@ -44,6 +44,44 @@ assert historical_forecast([1, 2, 3]) is None
 timegpt = _normalize_timegpt_forecast({"mean": [101, 102, 103, 104, 105]}, 100, 5)
 assert timegpt and timegpt["forecast_price_5d"] == 105
 assert timegpt["forecast_change_5d_pct"] == 5 and timegpt["forecast_method"] == "timegpt-1"
+
+# TSFM.ai (Chronos-2): median quantile wins; [[value], ...] rows; bad
+# payloads fall through to the next provider instead of raising.
+tsfm = _normalize_tsfm_forecast(
+    {
+        "model": "amazon/chronos-2",
+        "outputs": [
+            {
+                "mean": [[101], [102], [103], [104], [105]],
+                "quantile_predictions": [
+                    {"level": 0.1, "values": [[99], [100], [101], [102], [103]]},
+                    {"level": 0.5, "values": [[102], [102], [103], [104], [106]]},
+                    {"level": 0.9, "values": [[103], [104], [105], [106], [109]]},
+                ],
+            }
+        ],
+    },
+    100,
+    5,
+)
+assert tsfm and tsfm["forecast_price_5d"] == 106
+assert tsfm["forecast_change_5d_pct"] == 6 and tsfm["forecast_method"] == "tsfm-chronos-2"
+assert tsfm["forecast_horizon_days"] == 5
+# No 0.5 level: the middle quantile stands in; no quantiles at all: mean.
+middle = _normalize_tsfm_forecast(
+    {"outputs": [{"quantile_predictions": [
+        {"level": 0.2, "values": [[99]]}, {"level": 0.8, "values": [[104]]},
+    ]}]},
+    100,
+    1,
+)
+assert middle and middle["forecast_price_5d"] == 104
+mean_only = _normalize_tsfm_forecast({"outputs": [{"mean": [[101], [103]]}]}, 100, 2)
+assert mean_only and mean_only["forecast_price_5d"] == 103
+assert _normalize_tsfm_forecast({}, 100, 5) is None
+assert _normalize_tsfm_forecast({"outputs": []}, 100, 5) is None
+assert _normalize_tsfm_forecast({"outputs": [{"mean": [[101]]}]}, 100, 5) is None  # too short
+print("TSFM normalizer OK: median quantile, middle fallback, mean fallback, gaps")
 
 short = compute_indicators([1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [10] * 5)
 assert "macd" not in short and "atr_14" not in short and "bollinger_percent_b" not in short

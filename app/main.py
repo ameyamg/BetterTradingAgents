@@ -198,7 +198,7 @@ async def health():
             "fundamentals": "finnhub" if settings.finnhub_api_key else "yfinance",
             "news_search": "olostep" if settings.olostep_api_key else "disabled",
             "social": "olostep" if settings.olostep_api_key else "disabled",
-            "forecast": "timegpt" if settings.nixtla_api_key else "local",
+            "forecast": ("timegpt" if settings.nixtla_api_key else "tsfm" if settings.tsfm_api_key else "local"),
         },
         "max_tickers": settings.max_tickers,
         "debate_rounds": settings.debate_rounds,

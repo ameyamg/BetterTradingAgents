@@ -95,6 +95,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
             _field("finnhub_api_key", "FINNHUB_API_KEY", "Finnhub API key", secret=True, hint="Profiles, fundamentals, company news; falls back to yfinance"),
             _field("olostep_api_key", "OLOSTEP_API_KEY", "Olostep API key", secret=True, hint="News search and Reddit/StockTwits sentiment"),
             _field("nixtla_api_key", "NIXTLA_API_KEY", "Nixtla TimeGPT API key", secret=True, hint="5-day forecast; falls back to the local trend model"),
+            _field("tsfm_api_key", "TSFM_API_KEY", "TSFM.ai API key", secret=True, hint="Chronos-2 hosted forecast, used when TimeGPT is unavailable; falls back to the local trend model"),
         ],
     },
     {

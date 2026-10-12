@@ -162,6 +162,13 @@ function concentrationBlock(analysis) {
   return `<div class="risk-flags concentration"><strong>${title}</strong><span>⚠ ${escapeHtml(c.detail || "")}</span></div>`;
 }
 
+function forecastMethodLabel(analysis) {
+  if (analysis.forecast_method === "timegpt-1") return "TimeGPT";
+  if (String(analysis.forecast_method || "").startsWith("tsfm-")) return "Chronos-2 via TSFM";
+  if (analysis.forecast_trend_r2 != null) return `Local fit R² ${Number(analysis.forecast_trend_r2).toFixed(2)}`;
+  return "Local";
+}
+
 function forecastBandNote(analysis) {
   // Noise-band context so a red -2% forecast next to a BUY stops looking
   // contradictory: inside +/-1 sigma it is statistical noise, not a signal.
@@ -435,7 +442,7 @@ export function renderResultCard(analysis) {
     <div class="decision-brief">
       ${changed}
       ${gated ? `<div class="gate-banner"><span class="gate-chip">risk-adjusted</span><span class="gate-line">${escapeHtml(gateLine(analysis))}</span>${downgradeFlag(analysis) ? `<small>⚠ ${escapeHtml(downgradeFlag(analysis))}</small>` : ""}</div>` : ""}
-      <div class="decision-facts"><div><span>Current price</span><strong>${analysis.price != null ? `$${Number(analysis.price).toFixed(2)}` : "Unavailable"}</strong></div><div><span>5-day forecast</span><strong>${analysis.forecast_price_5d != null ? `$${Number(analysis.forecast_price_5d).toFixed(2)} (${Number(analysis.forecast_change_5d_pct) >= 0 ? "+" : ""}${Number(analysis.forecast_change_5d_pct).toFixed(2)}%)` : "Unavailable"}</strong><small>${analysis.forecast_method === "timegpt-1" ? "TimeGPT" : analysis.forecast_trend_r2 != null ? `Local fit R² ${Number(analysis.forecast_trend_r2).toFixed(2)}` : "Local"}${forecastBandNote(analysis)}</small></div><div><span>Data age</span><strong>${age.stale ? '<span class="flag-warn">' : ""}${ageLabel(age.hours)}${cachedRun ? " · cached" : ""}${age.stale ? " · stale</span>" : ""}</strong><small>${escapeHtml(asOf)}</small></div><div><span>Evidence strength</span><strong>${convictionLabel(analysis.confidence)} · ${confidencePct}%</strong><small id="track-record-${ticker}" class="track-record"></small></div><div><span>Horizon</span><strong>${OUTLOOK_LABELS[state.outlook] || state.outlook}</strong><small>${profile.label} depth</small></div><div><span>Analyst coverage</span><strong>${analysis.error ? "n/a" : `${cov.available}/${cov.expected} analysts`}</strong>${!analysis.error && cov.split.available ? `<small>${splitLabel(cov.split)}</small>` : ""}${fallbacks.length ? `<small class="flag-warn">${fallbacks.map(escapeHtml).join(" · ")}</small>` : ""}</div><div><span>Suggested size</span><strong>${analysis.suggested_size_usd ? fmtUsd(analysis.suggested_size_usd) : "No position"}</strong></div></div>
+      <div class="decision-facts"><div><span>Current price</span><strong>${analysis.price != null ? `$${Number(analysis.price).toFixed(2)}` : "Unavailable"}</strong></div><div><span>5-day forecast</span><strong>${analysis.forecast_price_5d != null ? `$${Number(analysis.forecast_price_5d).toFixed(2)} (${Number(analysis.forecast_change_5d_pct) >= 0 ? "+" : ""}${Number(analysis.forecast_change_5d_pct).toFixed(2)}%)` : "Unavailable"}</strong><small>${forecastMethodLabel(analysis)}${forecastBandNote(analysis)}</small></div><div><span>Data age</span><strong>${age.stale ? '<span class="flag-warn">' : ""}${ageLabel(age.hours)}${cachedRun ? " · cached" : ""}${age.stale ? " · stale</span>" : ""}</strong><small>${escapeHtml(asOf)}</small></div><div><span>Evidence strength</span><strong>${convictionLabel(analysis.confidence)} · ${confidencePct}%</strong><small id="track-record-${ticker}" class="track-record"></small></div><div><span>Horizon</span><strong>${OUTLOOK_LABELS[state.outlook] || state.outlook}</strong><small>${profile.label} depth</small></div><div><span>Analyst coverage</span><strong>${analysis.error ? "n/a" : `${cov.available}/${cov.expected} analysts`}</strong>${!analysis.error && cov.split.available ? `<small>${splitLabel(cov.split)}</small>` : ""}${fallbacks.length ? `<small class="flag-warn">${fallbacks.map(escapeHtml).join(" · ")}</small>` : ""}</div><div><span>Suggested size</span><strong>${analysis.suggested_size_usd ? fmtUsd(analysis.suggested_size_usd) : "No position"}</strong></div></div>
       <div class="call-read">
         <div class="manager-conclusion"><span class="eyebrow">Why this call</span><p class="thesis">${escapeHtml(analysis.summary || analysis.error || "No manager summary was returned.")}</p></div>
         ${conditions}

@@ -31,6 +31,10 @@ FINNHUB_BASE = "https://finnhub.io/api/v1"
 OLOSTEP_SEARCH = "https://api.olostep.com/v1/searches"
 OLOSTEP_SCRAPE = "https://api.olostep.com/v1/scrapes"
 TIMEGPT_FORECAST = "https://api.nixtla.io/v2/forecast"
+TSFM_FORECAST = "https://api.tsfm.ai/v1/forecast"
+# Chronos-2 is TSFM.ai's flagship forecaster (quantile-native); the model
+# catalog is discoverable at https://api.tsfm.ai/api/models.
+TSFM_MODEL = "amazon/chronos-2"
 
 _price_cache: dict[str, tuple[float, float]] = {}  # ticker -> (price, fetched_at)
 _CACHE_TTL = 60.0
@@ -230,6 +234,37 @@ async def get_timegpt_forecast(
         return None
 
 
+async def get_tsfm_forecast(
+    closes: list[float], horizon: int = 5
+) -> dict | None:
+    """Ask TSFM.ai (Chronos-2) for a zero-shot forecast; None for the fallback."""
+    if not settings.tsfm_api_key or horizon < 1 or len(closes) < 30:
+        return None
+    sample = closes[-512:]
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                TSFM_FORECAST,
+                headers={"Authorization": f"Bearer {settings.tsfm_api_key}"},
+                json={
+                    "model": TSFM_MODEL,
+                    # Canonical TSFM.ai shape: univariate targets are rows of
+                    # [value], so the payload moves between their SDKs unchanged.
+                    "inputs": [{"target": [[value] for value in sample]}],
+                    "parameters": {
+                        "prediction_length": horizon,
+                        "frequency": "D",
+                        "quantile_levels": [0.1, 0.5, 0.9],
+                    },
+                },
+            )
+            response.raise_for_status()
+            return _normalize_tsfm_forecast(response.json(), closes[-1], horizon)
+    except Exception as exc:  # noqa: BLE001 - provider failure must degrade gracefully
+        logger.warning("TSFM forecast failed: %s", exc)
+        return None
+
+
 def _normalize_timegpt_forecast(
     payload: dict, current_price: float, horizon: int
 ) -> dict | None:
@@ -250,6 +285,52 @@ def _normalize_timegpt_forecast(
         "forecast_window_days": None,
         "forecast_horizon_days": horizon,
         "forecast_method": "timegpt-1",
+    }
+
+
+def _normalize_tsfm_forecast(
+    payload: dict, current_price: float, horizon: int
+) -> dict | None:
+    """Map a TSFM.ai response onto the app's forecast fields.
+
+    Prefers the median quantile path (level 0.5), falls back to the middle
+    quantile and then the mean; paths are rows of [value] per the canonical
+    response. The +/- band stays volatility-derived (risk.forecast_noise_pct)
+    exactly like every other provider, so the risk-gate math is untouched.
+    """
+    outputs = payload.get("outputs")
+    if not isinstance(outputs, list) or not outputs:
+        return None
+    output = outputs[0]
+    if not isinstance(output, dict):
+        return None
+    path = None
+    quantiles = output.get("quantile_predictions")
+    if isinstance(quantiles, list) and quantiles:
+        entries = [e for e in quantiles if isinstance(e, dict) and isinstance(e.get("values"), list)]
+        pick = next((e for e in entries if e.get("level") == 0.5), entries[len(entries) // 2] if entries else None)
+        if pick is not None:
+            path = pick["values"]
+    if path is None:
+        path = output.get("mean")
+    if not isinstance(path, list) or len(path) < horizon:
+        return None
+    point = path[horizon - 1]
+    if isinstance(point, list):
+        point = point[0] if point else None
+    if not isinstance(point, (int, float)) or not isfinite(float(point)):
+        return None
+    price = float(point)
+    if current_price <= 0 or price <= 0:
+        return None
+    model_id = str(payload.get("model") or TSFM_MODEL)
+    return {
+        "forecast_price_5d": round(price, 2),
+        "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
+        "forecast_trend_r2": None,
+        "forecast_window_days": None,
+        "forecast_horizon_days": horizon,
+        "forecast_method": f"tsfm-{model_id.rsplit('/', 1)[-1]}",
     }
 
 
