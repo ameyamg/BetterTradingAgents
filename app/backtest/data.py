@@ -3,10 +3,11 @@
 build_snapshot(ticker, as_of) reconstructs the MarketData the live pipeline
 would have seen on that date: 6 months of OHLCV ending at as_of and company
 news published on or before as_of (anti-look-ahead, enforced here).
-Fundamentals have no point-in-time source, so the honest default (ROADMAP
-P1.2) excludes them from replays entirely; callers can opt in to
-current-vintage fundamentals with fundamentals="current", which leaks later
-information into historical runs and is flagged loudly in the report.
+Fundamentals come from one of three vintages (ROADMAP P1.2, P1.15): the honest
+default "excluded" drops them from replays entirely; "sec_edgar" serves US
+statements as filed on or before the date (a real point-in-time source);
+"current" replays current-vintage values and leaks later information, so it is
+opt-in and flagged loudly in the report.
 Everything is cached in SQLite keyed by ticker+date+window so warm re-runs
 make zero network calls; BACKTEST_OFFLINE=1 turns cache misses into errors.
 """
@@ -29,6 +30,7 @@ LOOKBACK_DAYS = 183  # ~6 months of history, same window the live pipeline uses
 NEWS_DAYS = 14
 FUNDAMENTALS_EXCLUDED = "excluded"
 FUNDAMENTALS_CURRENT = "current"
+FUNDAMENTALS_SEC_EDGAR = "sec_edgar"
 
 
 def published_on_or_before(item: dict, as_of: str) -> bool:
@@ -103,6 +105,24 @@ async def _current_fundamentals(
     return payload
 
 
+async def _sec_edgar_fundamentals(ticker: str, as_of: str, offline: bool) -> dict:
+    """As-filed fundamentals for one date (ROADMAP P1.15), best-effort.
+
+    Not separately cached: the per-date snapshot payload stores the result, so
+    a warm re-run never refetches. A cold offline miss is caught upstream by
+    build_snapshot's offline guard before this is reached.
+    """
+    if offline:
+        return {"company_name": ticker, "fundamentals": {}, "source": "none"}
+    from app.tools import sec_edgar
+
+    try:
+        return await sec_edgar.fetch_fundamentals(ticker, as_of)
+    except Exception as exc:  # noqa: BLE001 - a missing vendor degrades to none
+        logger.warning("[backtest] %s SEC EDGAR fundamentals failed: %s", ticker, exc)
+        return {"company_name": ticker, "fundamentals": {}, "source": "none"}
+
+
 async def build_snapshot(
     ticker: str,
     as_of: str,
@@ -114,29 +134,48 @@ async def build_snapshot(
 ) -> MarketData:
     """MarketData as known at close of `as_of`, served from cache when warm.
 
-    `fundamentals` selects "excluded" (default: no point-in-time source
-    exists, so replays run without the fundamental analyst) or "current"
-    (current-vintage data - a stated look-ahead bias, opt-in only).
+    `fundamentals` selects "excluded" (default: replays run without the
+    fundamental analyst), "sec_edgar" (US statements as filed on or before the
+    date - a real point-in-time source), or "current" (current-vintage data - a
+    stated look-ahead bias, opt-in only).
     """
-    if fundamentals not in (FUNDAMENTALS_EXCLUDED, FUNDAMENTALS_CURRENT):
-        raise ValueError(f"fundamentals mode must be excluded or current, got {fundamentals!r}")
+    if fundamentals not in (
+        FUNDAMENTALS_EXCLUDED,
+        FUNDAMENTALS_CURRENT,
+        FUNDAMENTALS_SEC_EDGAR,
+    ):
+        raise ValueError(
+            f"fundamentals mode must be excluded, sec_edgar or current, "
+            f"got {fundamentals!r}"
+        )
     offline = offline_mode() if offline is None else offline
 
     cached = cache.get_snapshot(ticker, as_of, lookback_days, news_days)
     if cached is not None:
-        if fundamentals == FUNDAMENTALS_CURRENT and cached.get("sources", {}).get(
-            "fundamentals"
-        ) in (FUNDAMENTALS_EXCLUDED, ""):
+        cached_source = cached.get("sources", {}).get("fundamentals", "")
+        upgrade = None
+        if fundamentals == FUNDAMENTALS_CURRENT and cached_source in (
+            FUNDAMENTALS_EXCLUDED,
+            "",
+        ):
             # Snapshot was cached under the honest default; merge the
             # opted-in current-vintage fundamentals back in for this replay.
-            merged = await _current_fundamentals(ticker, cache, offline)
+            upgrade = await _current_fundamentals(ticker, cache, offline)
+        elif (
+            fundamentals == FUNDAMENTALS_SEC_EDGAR
+            and cached_source != FUNDAMENTALS_SEC_EDGAR
+        ):
+            # Cached under a different vintage; serve as-filed data for this
+            # replay and store it back under the sec_edgar source.
+            upgrade = await _sec_edgar_fundamentals(ticker, as_of, offline)
+        if upgrade is not None:
             cached = dict(cached)
-            cached["fundamentals"] = merged.get("fundamentals", {})
+            cached["fundamentals"] = upgrade.get("fundamentals", {})
             cached["company_name"] = (
-                merged.get("company_name") or cached.get("company_name") or ticker
+                upgrade.get("company_name") or cached.get("company_name") or ticker
             )
             sources = dict(cached.get("sources", {}))
-            sources["fundamentals"] = merged.get("source", "none")
+            sources["fundamentals"] = upgrade.get("source", "none")
             cached["sources"] = sources
             cache.put_snapshot(ticker, as_of, lookback_days, news_days, cached)
         return market_from_payload(
@@ -170,7 +209,12 @@ async def build_snapshot(
 
     if fundamentals == FUNDAMENTALS_CURRENT:
         fundamentals_payload = await _current_fundamentals(ticker, cache, offline)
-        company_name = fundamentals_payload.get("company_name", ticker)
+    elif fundamentals == FUNDAMENTALS_SEC_EDGAR:
+        fundamentals_payload = await _sec_edgar_fundamentals(ticker, as_of, offline)
+    else:
+        fundamentals_payload = None
+    if fundamentals_payload is not None:
+        company_name = fundamentals_payload.get("company_name") or ticker
         fundamentals_data = fundamentals_payload.get("fundamentals", {})
         fundamentals_source = fundamentals_payload.get("source", "none")
     else:

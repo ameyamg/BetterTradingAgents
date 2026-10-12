@@ -51,6 +51,9 @@ class Settings:
     finnhub_api_key: str = _env("FINNHUB_API_KEY")
     olostep_api_key: str = _env("OLOSTEP_API_KEY")
     nixtla_api_key: str = _env("NIXTLA_API_KEY")
+    # SEC EDGAR (ROADMAP P1.15) needs no key, but asks callers to identify
+    # themselves. Set your own contact so SEC can reach you, not the project.
+    sec_edgar_user_agent: str = _env("SEC_EDGAR_USER_AGENT")
 
     # Analysis limits
     max_tickers: int = int(_env("MAX_TICKERS", "5"))

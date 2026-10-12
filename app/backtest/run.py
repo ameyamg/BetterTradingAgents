@@ -5,8 +5,9 @@ in the CLI). Decisions near the end of the grid whose horizon window has not
 finished yet are reported as ungraded, never dropped silently.
 
 Honest-experiment defaults (ROADMAP P1.2): fundamentals are excluded from
-replays (no point-in-time source; opt in with fundamentals="current" and a
-loud report warning), every report carries a reproducibility manifest, cheap
+replays by default (opt in to the as-filed SEC EDGAR source with
+fundamentals="sec_edgar", or to current-vintage with "current" and a loud
+report warning), every report carries a reproducibility manifest, cheap
 baselines (all-HOLD, buy-and-hold, deterministic momentum) sit beside the
 pipeline's numbers, an optional holdout date splits tune from untouched test
 periods, and every period reports its sample size, a bootstrap CI for mean
@@ -22,6 +23,7 @@ from app.backtest.cache import SnapshotCache, offline_mode
 from app.backtest.data import (
     FUNDAMENTALS_CURRENT,
     FUNDAMENTALS_EXCLUDED,
+    FUNDAMENTALS_SEC_EDGAR,
     LOOKBACK_DAYS,
     NEWS_DAYS,
     build_snapshot,
@@ -103,9 +105,11 @@ async def run_backtest(
     it, so backtests stay free and deterministic.
 
     `fundamentals="excluded"` (default) omits fundamentals from snapshots and
-    drops the fundamental analyst from the replay - there is no point-in-time
-    source, so current-vintage values would leak later information.
-    `fundamentals="current"` opts back in and the report says so loudly.
+    drops the fundamental analyst from the replay.
+    `fundamentals="sec_edgar"` serves US statements as filed on or before each
+    date (a real point-in-time source, so the fundamental analyst may run).
+    `fundamentals="current"` replays current-vintage values and the report
+    says so loudly.
     `holdout` splits the grid into a tune period (< holdout) and an untouched
     test period (>= holdout); headline numbers belong to the test period.
     `exclude_analysts` drops further researchers (paired experiments).
@@ -115,8 +119,15 @@ async def run_backtest(
 
     if mode not in ("mock", "llm"):
         raise ValueError(f"mode must be mock or llm, got {mode!r}")
-    if fundamentals not in (FUNDAMENTALS_EXCLUDED, FUNDAMENTALS_CURRENT):
-        raise ValueError(f"fundamentals must be excluded or current, got {fundamentals!r}")
+    if fundamentals not in (
+        FUNDAMENTALS_EXCLUDED,
+        FUNDAMENTALS_CURRENT,
+        FUNDAMENTALS_SEC_EDGAR,
+    ):
+        raise ValueError(
+            f"fundamentals must be excluded, sec_edgar or current, "
+            f"got {fundamentals!r}"
+        )
     if holdout is not None:
         try:
             date.fromisoformat(holdout)

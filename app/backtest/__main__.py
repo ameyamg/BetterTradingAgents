@@ -3,9 +3,10 @@
 Mock mode is the default (free, deterministic). --llm runs the real agents
 after printing a cost estimate and requiring confirmation (or --yes).
 Honest-experiment controls (ROADMAP P1.2): fundamentals are excluded from
-replays by default (--allow-current-fundamentals opts back in with a loud
-warning), --holdout splits tune from untouched test dates, --paired runs a
-one-change comparison, and every report writes a reproducibility manifest.
+replays by default (--sec-edgar-fundamentals adds the point-in-time as-filed
+source, --allow-current-fundamentals opts into a loud look-ahead warning),
+--holdout splits tune from untouched test dates, --paired runs a one-change
+comparison, and every report writes a reproducibility manifest.
 """
 
 import argparse
@@ -41,6 +42,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--allow-current-fundamentals", action="store_true",
                         help="replay current-vintage fundamentals (LOOK-AHEAD BIAS: "
                              "leaks later information into historical runs)")
+    parser.add_argument("--sec-edgar-fundamentals", action="store_true",
+                        help="replay US fundamentals as filed by SEC EDGAR "
+                             "(point-in-time: only data filed on or before each "
+                             "decision date; non-US tickers may have no data)")
     parser.add_argument("--holdout", default=None, metavar="YYYY-MM-DD",
                         help="dates on/after this form the untouched test period")
     parser.add_argument("--seed", type=int, default=7,
@@ -75,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = parse_args(argv)
 
-    from app.backtest.data import FUNDAMENTALS_CURRENT
+    from app.backtest.data import FUNDAMENTALS_CURRENT, FUNDAMENTALS_SEC_EDGAR
     from app.backtest.experiments import parse_pair, run_paired
     from app.backtest.run import date_grid, run_backtest
 
@@ -90,7 +95,17 @@ def main(argv: list[str] | None = None) -> None:
     if args.llm:
         confirm_llm_cost(args, len(tickers) * len(grid))
 
-    fundamentals = FUNDAMENTALS_CURRENT if args.allow_current_fundamentals else "excluded"
+    if args.sec_edgar_fundamentals and args.allow_current_fundamentals:
+        raise SystemExit(
+            "choose one fundamentals source: --sec-edgar-fundamentals "
+            "(point-in-time) or --allow-current-fundamentals (look-ahead)"
+        )
+    if args.sec_edgar_fundamentals:
+        fundamentals = FUNDAMENTALS_SEC_EDGAR
+    elif args.allow_current_fundamentals:
+        fundamentals = FUNDAMENTALS_CURRENT
+    else:
+        fundamentals = "excluded"
     common = dict(
         tickers=tickers,
         start=args.start,

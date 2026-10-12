@@ -31,10 +31,15 @@ def build_flags(mode: str, fundamentals: str = "excluded") -> dict:
         fundamentals_bias = (
             "current-vintage fundamentals replayed - LOOK-AHEAD BIAS, opt-in only"
         )
+    elif fundamentals == "sec_edgar":
+        fundamentals_bias = (
+            "fundamentals served as filed by SEC EDGAR on or before each date - "
+            "point-in-time, no look-ahead"
+        )
     else:
         fundamentals_bias = (
-            "fundamentals excluded from replay: no point-in-time source exists "
-            "(opt back in with --allow-current-fundamentals and accept the bias)"
+            "fundamentals excluded from replay: opt in to the point-in-time "
+            "SEC EDGAR source with --sec-edgar-fundamentals"
         )
     return {
         "memorization_risk": "high" if mode == "llm" else "low (mock mode - no LLM)",

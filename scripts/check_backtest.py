@@ -46,6 +46,7 @@ from app.backtest.grade import (  # noqa: E402
 from app.backtest.run import date_grid  # noqa: E402
 from app.backtest.report import build_flags  # noqa: E402
 from app.config import settings  # noqa: E402
+from app.tools import sec_edgar as sec  # noqa: E402
 
 settings.llm_api_key = ""
 
@@ -113,6 +114,9 @@ assert build_flags("mock")["memorization_risk"].startswith("low")
 assert build_flags("mock")["fundamentals_vintage"] == "excluded"
 assert "excluded from replay" in build_flags("mock")["fundamentals_bias"]
 assert "LOOK-AHEAD BIAS" in build_flags("mock", "current")["fundamentals_bias"]
+assert build_flags("mock", "sec_edgar")["fundamentals_vintage"] == "sec_edgar"
+assert "as filed" in build_flags("mock", "sec_edgar")["fundamentals_bias"]
+assert "no look-ahead" in build_flags("mock", "sec_edgar")["fundamentals_bias"]
 print("report flags OK")
 
 # ---- fundamentals vintage views (P1.2) ---------------------------------------------
@@ -126,8 +130,78 @@ stripped = _apply_fundamentals_mode(cached_payload, "excluded")
 assert stripped["fundamentals"] == {} and stripped["sources"]["fundamentals"] == "excluded"
 assert stripped["company_name"] == "NVIDIA"  # only the metrics are dropped
 assert _apply_fundamentals_mode(cached_payload, "current") == cached_payload
+assert _apply_fundamentals_mode(cached_payload, "sec_edgar") == cached_payload
 assert cached_payload["fundamentals"] == {"pe_ratio_ttm": 20.0}  # view never mutates input
 print("fundamentals vintage views OK")
+
+# ---- SEC EDGAR as-filed fundamentals (P1.15) --------------------------------------
+def _fact(start, end, val, filed):
+    return {"start": start, "end": end, "val": val, "filed": filed}
+
+
+REVENUE_Q = [
+    _fact("2023-01-01", "2023-03-31", 100, "2023-05-01"),
+    _fact("2023-04-01", "2023-06-30", 110, "2023-08-01"),
+    _fact("2023-07-01", "2023-09-30", 120, "2023-11-01"),
+    _fact("2023-10-01", "2023-12-31", 130, "2024-02-01"),
+    _fact("2024-01-01", "2024-03-31", 140, "2024-05-01"),
+    _fact("2024-04-01", "2024-06-30", 150, "2024-08-01"),
+    _fact("2024-07-01", "2024-09-30", 160, "2024-11-01"),
+    _fact("2024-10-01", "2024-12-31", 170, "2025-02-01"),
+    # restatement of Q1 2023 filed a year later: as-filed must keep the original
+    _fact("2023-01-01", "2023-03-31", 999, "2024-06-01"),
+]
+
+
+def _quarter_series(scale):
+    return [
+        _fact(f["start"], f["end"], round(f["val"] * scale, 2), f["filed"])
+        for f in REVENUE_Q
+        if f["val"] != 999
+    ]
+
+
+SEC_FACTS = {
+    "entityName": "Test Co",
+    "facts": {
+        "us-gaap": {
+            "Revenues": {"units": {"USD": REVENUE_Q}},
+            "GrossProfit": {"units": {"USD": _quarter_series(0.6)}},
+            "OperatingIncomeLoss": {"units": {"USD": _quarter_series(0.2)}},
+            "NetIncomeLoss": {"units": {"USD": _quarter_series(0.1)}},
+            "StockholdersEquity": {
+                "units": {
+                    "USD": [
+                        {"end": "2023-12-31", "val": 500, "filed": "2024-02-01"},
+                        {"end": "2024-12-31", "val": 600, "filed": "2025-02-01"},
+                    ]
+                }
+            },
+            "EarningsPerShareDiluted": {"units": {"USD/shares": _quarter_series(0.01)}},
+        }
+    },
+}
+
+# first reported wins; a period not yet filed is never served
+rows = sec.select_as_filed(REVENUE_Q, "2024-06-01")
+q1_2023 = next(r for r in rows if r["end"] == "2023-03-31")
+assert q1_2023["val"] == 100, "must read as first reported, not the later restatement"
+assert sec.select_as_filed(REVENUE_Q, "2023-04-01") == [], "unfiled period must be withheld"
+assert sec.select_as_filed([], "2024-06-01") == []
+print("SEC EDGAR select_as_filed OK: first-reported + as-of gate")
+
+normalized = sec.fundamentals_as_of(SEC_FACTS, "2025-03-01")
+assert normalized["revenue_growth_ttm_pct"] == 34.78, normalized
+assert normalized["net_margin_pct"] == 10.0, normalized
+assert normalized["gross_margin_pct"] == 60.0, normalized
+assert normalized["operating_margin_pct"] == 20.0, normalized
+assert normalized["roe_pct"] == 10.33, normalized
+assert normalized["eps_ttm"] == 6.2, normalized
+# too early for a trailing year: no growth is fabricated, no crash
+early = sec.fundamentals_as_of(SEC_FACTS, "2023-04-01")
+assert "revenue_growth_ttm_pct" not in early, early
+assert sec.fundamentals_as_of({}, "2025-03-01") == {}
+print("SEC EDGAR fundamentals_as_of OK: margins, growth, ROE, EPS, graceful gaps")
 
 # ---- momentum baseline signal ------------------------------------------------------
 rising = [100.0 + i * 0.5 for i in range(130)]
@@ -353,6 +427,36 @@ async def e2e():
     current_md = (OUT_DIR / "report-medium-current.md").read_text()
     assert "WARNING: current-vintage fundamentals" in current_md
     print("current-vintage opt-in OK: warning present, snapshot upgraded from cache")
+
+    # as-filed SEC EDGAR fundamentals (P1.15): the fundamental analyst runs at
+    # Max depth and the snapshot carries the point-in-time values, no warning
+    sec_calls = {"n": 0}
+
+    async def fake_sec(ticker, as_of):
+        sec_calls["n"] += 1
+        return {
+            "company_name": f"{ticker} Inc",
+            "fundamentals": {"net_margin_pct": 12.5, "roe_pct": 18.0},
+            "source": "sec_edgar",
+        }
+
+    sec.fetch_fundamentals = fake_sec
+    asfiled = await run_backtest(
+        tickers=["NVDA"], start=START, end=START, step_days=21, horizon_days=21,
+        depth="max", mode="mock", out_dir=OUT_DIR, cache=cache,
+        fundamentals="sec_edgar", name="max-sec-edgar",
+    )
+    assert asfiled.config["fundamentals"] == "sec_edgar"
+    assert "fundamental" not in asfiled.config["excluded_analysts"], asfiled.config
+    assert "market" in asfiled.config["excluded_analysts"]  # index data still has no PIT source
+    assert sec_calls["n"] == 1, sec_calls
+    asfiled_snapshot = cache.get_snapshot("NVDA", START, 183, 14)
+    assert asfiled_snapshot["sources"]["fundamentals"] == "sec_edgar"
+    assert asfiled_snapshot["fundamentals"]["net_margin_pct"] == 12.5
+    asfiled_md = (OUT_DIR / "report-max-sec-edgar.md").read_text()
+    assert "point-in-time, no look-ahead" in asfiled_md
+    assert "WARNING: current-vintage fundamentals" not in asfiled_md
+    print("SEC EDGAR as-filed mode OK: fundamental analyst runs, no look-ahead warning")
 
     # holdout split: periods sum to the whole grid and the report shows verdicts
     holdout_day = END_CHECKS["mid"]
