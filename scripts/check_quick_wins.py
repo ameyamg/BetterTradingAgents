@@ -195,7 +195,7 @@ print("market analyst mocks OK:", _regime["signal"], _regime["confidence"])
 _fc_payload = {
     "price": 100.0,
     "history_days": 60,
-    "timegpt_forecast": {"forecast_change_5d_pct": -4.0, "forecast_method": "timegpt-1"},
+    "hosted_forecast": {"forecast_change_5d_pct": -4.0, "forecast_method": "timegpt-1"},
     "local_trend_forecast": {"forecast_change_5d_pct": 1.0, "forecast_trend_r2": 0.9,
                              "forecast_method": "log_linear_trend"},
     "trend_context": {"volatility_annualized_pct": 20.0},
@@ -203,16 +203,22 @@ _fc_payload = {
 _fc = forecast_agent.mock("NVDA", _fc_payload)
 assert _fc["signal"] == "bearish" and _fc["confidence"] >= 0.5, _fc  # -4% clears ~2.8% noise
 _fc_noisy = forecast_agent.mock("NVDA", {**_fc_payload,
-                                         "timegpt_forecast": {"forecast_change_5d_pct": -1.0,
+                                         "hosted_forecast": {"forecast_change_5d_pct": -1.0,
                                                               "forecast_method": "timegpt-1"}})
 assert _fc_noisy["signal"] == "neutral", _fc_noisy  # -1% is inside the noise band
-_fc_weak = forecast_agent.mock("NVDA", {"timegpt_forecast": None,
+_fc_weak = forecast_agent.mock("NVDA", {"hosted_forecast": None,
                                         "local_trend_forecast": {"forecast_change_5d_pct": 3.0,
                                                                  "forecast_trend_r2": 0.1,
                                                                  "forecast_method": "log_linear_trend"},
                                         "trend_context": {"volatility_annualized_pct": 20.0}})
 assert _fc_weak["signal"] == "neutral" and "unusable" in _fc_weak["summary"], _fc_weak
 print("forecast mock OK:", _fc["signal"], _fc["confidence"])
+
+# The analyst names the actual provider in its prompt, never a hardcoded one.
+assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "timegpt-1"}}) == "Nixtla TimeGPT"
+assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "tsfm-chronos-2"}}) == "TSFM.ai chronos-2"
+assert forecast_agent._hosted_provider({}) == "the configured hosted provider"
+print("forecast provider label OK")
 
 # ---- workflow imports (catches syntax / import errors everywhere) ----------
 import app.main  # noqa: E402, F401

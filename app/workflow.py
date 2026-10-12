@@ -783,11 +783,15 @@ async def analyze_ticker(
     token_totals: dict[str, int] = {}
     role_usage: dict[str, dict] = {}
     user_ctx = user_context(outlook)
+    noise_band_5d = risk.forecast_noise_pct(indicators.get("volatility_annualized_pct"))
     forecast_payload = {
         "price": market.price,
         "history_days": len(market.closes),
-        "timegpt_forecast": hosted_forecast,
+        "hosted_forecast": hosted_forecast,
         "local_trend_forecast": local_forecast,
+        # Precomputed so the analyst quotes the same 5-day band the risk gate
+        # uses, instead of reading the annualized volatility as a 5-day band.
+        "noise_band_5d_pct": round(noise_band_5d, 2) if noise_band_5d is not None else None,
         "user_context": user_ctx,
         "trend_context": {
             key: indicators.get(key)

@@ -19,6 +19,7 @@ os.environ["LLM_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
 os.environ["NIXTLA_API_KEY"] = ""
+os.environ["TSFM_API_KEY"] = ""
 
 from app.agents import manager as manager_agent  # noqa: E402
 from app.config import settings  # noqa: E402
@@ -99,7 +100,7 @@ configured = build("2026-09-08T11:00:00+00:00", "short_term", ALL,
                    results(), {"forecast": "local", "fundamentals": "yfinance",
                                "social": "olostep"}, now=NOW)
 assert configured.provider_fallbacks == [
-    "forecast: local model (TimeGPT unavailable)",
+    "forecast: local model (hosted forecast unavailable)",
     "fundamentals: yfinance (finnhub returned nothing)",
 ]
 settings.nixtla_api_key = ""

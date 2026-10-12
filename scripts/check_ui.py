@@ -16,6 +16,7 @@ os.environ["LLM_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
 os.environ["NIXTLA_API_KEY"] = ""
+os.environ["TSFM_API_KEY"] = ""
 os.environ["AUTOMATION_ENABLED"] = "0"
 
 from fastapi.testclient import TestClient  # noqa: E402

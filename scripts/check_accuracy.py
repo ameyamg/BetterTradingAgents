@@ -19,6 +19,7 @@ os.environ["LLM_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
 os.environ["NIXTLA_API_KEY"] = ""
+os.environ["TSFM_API_KEY"] = ""
 
 from app import accuracy, memory  # noqa: E402
 from app.config import settings  # noqa: E402

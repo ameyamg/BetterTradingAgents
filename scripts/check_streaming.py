@@ -21,6 +21,7 @@ os.environ["LLM_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
 os.environ["NIXTLA_API_KEY"] = ""
+os.environ["TSFM_API_KEY"] = ""
 os.environ["STREAM_REASONING"] = "1"
 
 from app import workflow  # noqa: E402
