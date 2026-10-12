@@ -37,6 +37,7 @@ export const TICKER_PATTERN = window.BTA_UI.TICKER_PATTERN;
 export const STREAM_WINDOW_CHARS = 2048;
 export const OUTLOOKS = ["day_trade", "short_term", "long_term"];
 export const OUTLOOK_LABELS = window.BTA_UI.OUTLOOK_LABELS;
+export const DEPTH_LABELS = window.BTA_UI.DEPTH_LABELS;
 export const ADVANCED_OPEN_KEY = "bta:advancedOpen";
 export const OUTLOOK_KEY = "bta:outlook";
 export const DEPTH_KEY = "bta:depth";

@@ -91,7 +91,8 @@ header {
   border-radius: 14px;
   box-shadow: var(--shadow);
 }
-.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 0 1 auto; }
+.brand > div { min-width: 0; }
 .logo-home {
   display: block;
   flex: none;
@@ -108,6 +109,7 @@ header {
 }
 h1 {
   font-size: 17px; margin: 0; font-weight: 700; letter-spacing: -0.015em; white-space: nowrap;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
   background: linear-gradient(90deg, #f4f7ff 30%, #9fdcb8);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;

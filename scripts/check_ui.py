@@ -70,6 +70,28 @@ for path in sorted((STATIC / "css").glob("*.css")):
             f"{path.name}: {match.group(1)} references itself and can never resolve"
 print("design tokens resolve OK")
 
+# ---- module imports must resolve: every name imported from the shared modules --
+# is actually exported there. A de-dup sweep once left compare.js importing
+# DEPTH_LABELS from constants.js after the export moved to ui.js, and only the
+# browser (not the offline suite) could see the module error.
+def _exported_names(text: str) -> set[str]:
+    names = set(re.findall(r"export (?:const|function|let) ([$\w]+)", text))
+    for block in re.findall(r"export const \{([^}]*)\}", text, re.S):
+        names.update(name.strip() for name in block.split(",") if name.strip())
+    return names
+
+
+for module_name in ("constants.js", "util.js"):
+    exports = _exported_names((STATIC / "js" / module_name).read_text(encoding="utf-8"))
+    pattern = re.compile(r'import\s*\{([^}]*)\}\s*from\s*"\./' + re.escape(module_name) + r'"', re.S)
+    for path in sorted((STATIC / "js").glob("*.js")):
+        for block in pattern.findall(path.read_text(encoding="utf-8")):
+            for name in (n.strip() for n in block.split(",")):
+                if name:
+                    assert name in exports, \
+                        f"static/js/{path.name} imports {name!r} from {module_name}, which does not export it"
+print("module imports resolve OK")
+
 # ---- server-rendered nav: links, active state, chips, feature toggles ----------
 client = TestClient(app, base_url="http://127.0.0.1")
 

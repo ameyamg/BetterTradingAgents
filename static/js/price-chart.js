@@ -110,9 +110,13 @@ function renderChart(target) {
     const mx = x(markIdx);
     const my = y(analysisPrice);
     const anchor = mx < W * 0.25 ? "start" : mx > W * 0.75 ? "end" : "middle";
+    // A run dated near the latest session prints its marker beside the
+    // Current label; lift it clear when the two would overprint.
+    const currentY = y(closes[closes.length - 1]);
+    const nearCurrent = mx > W - PAD.right - 170 && Math.abs(my - currentY) < 26;
     marks.push(
       `<circle class="chart-analysis" cx="${mx.toFixed(1)}" cy="${my.toFixed(1)}" r="4"></circle>`,
-      `<text class="chart-label" x="${mx.toFixed(1)}" y="${(my - 9).toFixed(1)}" text-anchor="${anchor}">Analysis $${Number(analysisPrice).toFixed(2)} (${escapeHtml(asOfDate)})</text>`
+      `<text class="chart-label" x="${mx.toFixed(1)}" y="${(my - (nearCurrent ? 26 : 9)).toFixed(1)}" text-anchor="${anchor}">Analysis $${Number(analysisPrice).toFixed(2)} (${escapeHtml(asOfDate)})</text>`
     );
   }
   const lastX = x(closes.length - 1);
