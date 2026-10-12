@@ -3,17 +3,17 @@
 
 import {
   EVIDENCE_META, ICONS, OUTLOOK_LABELS, RESEARCH_KEYS,
-} from "./constants.js?v=12";
-import { activeAgents, depthProfile } from "./options.js?v=12";
-import { state } from "./state.js?v=12";
-import { saveToWatchlist } from "./watchlist-actions.js?v=12";
-import { attachPaperOrder } from "./broker-actions.js?v=12";
-import { loadPriceChart } from "./price-chart.js?v=12";
-import { retryTicker } from "./tickers.js?v=12";
-import { sendChatMessage, setChatOpen, toggleChat } from "./chat.js?v=12";
+} from "./constants.js";
+import { activeAgents, depthProfile } from "./options.js";
+import { state } from "./state.js";
+import { saveToWatchlist } from "./watchlist-actions.js";
+import { attachPaperOrder } from "./broker-actions.js";
+import { loadPriceChart } from "./price-chart.js";
+import { retryTicker } from "./tickers.js";
+import { sendChatMessage, setChatOpen, toggleChat } from "./chat.js";
 import {
-  $, escapeAttr, escapeHtml, fmtCostUsd, fmtUsd, formatDate, formatDateTime, safeUrl,
-} from "./util.js?v=12";
+  $, decisionBadge, escapeAttr, escapeHtml, fmtCostUsd, fmtUsd, formatDate, formatDateTime, safeUrl,
+} from "./util.js";
 
 export function labelFor(agent, signal, confidence) {
   if (agent === "bull" || agent === "bear" || agent.endsWith("_rebuttal")) return `${Math.round((confidence ?? 0) * 100)}%`;
@@ -171,15 +171,6 @@ function forecastBandNote(analysis) {
   return ` · noise ±${Number(analysis.forecast_band_pct).toFixed(1)}%${z == null ? "" : ` (z ${z >= 0 ? "+" : ""}${Number(z).toFixed(2)})`}${beyond ? " · beyond band" : ""}`;
 }
 
-function decisionMeta(decision) {
-  return { BUY: { cls: "buy", icon: "▲" }, HOLD: { cls: "hold", icon: "■" }, SELL: { cls: "sell", icon: "▼" } }[decision] || { cls: "hold", icon: "■" };
-}
-
-export function decisionBadge(analysis) {
-  const meta = decisionMeta(analysis.decision);
-  return `<span class="decision ${meta.cls}"><span class="d-icon" aria-hidden="true">${meta.icon}</span>${escapeHtml(analysis.decision || "HOLD")}</span>`;
-}
-
 export function renderSummaryTable() {
   const analyses = [...state.tickers.values()].map((entry) => entry.analysis).filter(Boolean);
   const panel = $("summary-panel");
@@ -187,6 +178,7 @@ export function renderSummaryTable() {
   if (!analyses.length) return;
   const table = document.createElement("table");
   table.id = "summary-table";
+  table.className = "stack";
   table.innerHTML = `
     <caption class="sr-only">Decision summary for analyzed tickers</caption>
     <thead><tr><th scope="col">Ticker</th><th scope="col">Call</th><th scope="col" class="num">Price</th><th scope="col">Horizon</th><th scope="col">Data age</th><th scope="col">Coverage</th><th scope="col">Risk</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
@@ -206,7 +198,7 @@ export function renderSummaryTable() {
             : '<span class="flag-ok">✓ Clear</span>';
       return `<tr>
         <td data-label="Ticker"><strong>${escapeHtml(analysis.ticker)}</strong></td>
-        <td data-label="Call">${decisionBadge(analysis)}${gated ? `<span class="gate-chip">risk-adjusted</span>` : ""}<small>${convictionLabel(analysis.confidence)} · ${Math.round((analysis.confidence || 0) * 100)}%</small></td>
+        <td data-label="Call">${decisionBadge(analysis.decision)}${gated ? `<span class="gate-chip">risk-adjusted</span>` : ""}<small>${convictionLabel(analysis.confidence)} · ${Math.round((analysis.confidence || 0) * 100)}%</small></td>
         <td data-label="Price" class="num">${analysis.price != null ? `$${Number(analysis.price).toFixed(2)}` : "Not available"}</td>
         <td data-label="Horizon">${OUTLOOK_LABELS[state.outlook] || state.outlook}<small>${depthProfile().label} depth</small></td>
         <td data-label="Data age">${age.stale ? '<span class="flag-warn">' : ""}${ageLabel(age.hours)}${age.stale ? " · stale</span>" : ""}<small>${analysis.as_of ? escapeHtml(formatDateTime(analysis.as_of)) : "no timestamp"}${entry?.cached ? " · cached" : ""}</small></td>
@@ -338,7 +330,7 @@ function renderTrackRecord(analysis, ticker) {
     const outcome = graded
       ? `<strong>${pct(d.realized_return_pct)}</strong> over ${Number(d.window_days)}d${d.alpha_vs_spy_pct != null ? ` · SPY ${pct(d.spy_return_pct)} · alpha <strong>${pct(d.alpha_vs_spy_pct)}</strong>` : ""}${d.mature ? "" : " · partial window"}`
       : "outcome pending";
-    return `<li><div class="memory-line"><span>${escapeHtml(d.date)} ${decisionBadge(d)} at $${Number(d.price_at_decision).toFixed(2)}</span><span class="memory-outcome">${outcome}</span></div><small>${escapeHtml(d.reflection || "")}</small></li>`;
+    return `<li><div class="memory-line"><span>${escapeHtml(d.date)} ${decisionBadge(d.decision)} at $${Number(d.price_at_decision).toFixed(2)}</span><span class="memory-outcome">${outcome}</span></div><small>${escapeHtml(d.reflection || "")}</small></li>`;
   }).join("");
   return `<section class="result-block" aria-labelledby="memory-title-${ticker}"><div class="block-heading"><h3 id="memory-title-${ticker}">Past calls</h3></div><ul class="memory-list">${rows}</ul></section>`;
 }
@@ -423,7 +415,7 @@ export function renderResultCard(analysis) {
   const printBtn = '<button class="secondary-btn print-btn" type="button">Print brief</button>';
 
   card.innerHTML = `
-    <button class="result-summary" type="button" aria-expanded="false" aria-controls="${detailId}"><span class="result-identity"><span class="tk">${escapeHtml(ticker)}</span><span class="company">${escapeHtml(analysis.company_name || "Company name unavailable")}</span></span>${decisionBadge(analysis)}${gated ? '<span class="gate-chip">risk-adjusted</span>' : ""}<span class="summary-action">Evidence &amp; sources <span class="caret" aria-hidden="true">▶</span></span></button>
+    <button class="result-summary" type="button" aria-expanded="false" aria-controls="${detailId}"><span class="result-identity"><span class="tk">${escapeHtml(ticker)}</span><span class="company">${escapeHtml(analysis.company_name || "Company name unavailable")}</span></span>${decisionBadge(analysis.decision)}${gated ? '<span class="gate-chip">risk-adjusted</span>' : ""}<span class="summary-action">Evidence &amp; sources <span class="caret" aria-hidden="true">▶</span></span></button>
     <div class="decision-brief">
       ${changed}
       ${gated ? `<div class="gate-banner"><span class="gate-chip">risk-adjusted</span><span class="gate-line">${escapeHtml(gateLine(analysis))}</span>${downgradeFlag(analysis) ? `<small>⚠ ${escapeHtml(downgradeFlag(analysis))}</small>` : ""}</div>` : ""}

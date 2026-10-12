@@ -2,9 +2,9 @@
 
 import {
   AGENTS, DEPTH_KEY, DEPTH_PROFILES, OUTLOOKS, OUTLOOK_KEY, OUTLOOK_LABELS,
-} from "./constants.js?v=12";
-import { state } from "./state.js?v=12";
-import { $ } from "./util.js?v=12";
+} from "./constants.js";
+import { state } from "./state.js";
+import { $ } from "./util.js";
 
 export function setOutlook(outlook) {
   state.outlook = OUTLOOKS.includes(outlook) ? outlook : "short_term";

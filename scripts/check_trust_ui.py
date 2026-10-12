@@ -120,7 +120,7 @@ assert 'c.status === "ok"' in js
 assert "onclick=" not in js
 assert "type=\"module\"" in html  # ES module entry point, still no build step
 assert "prefers-reduced-motion" in css
-assert "#summary-table td::before" in css
+assert "table.stack td::before" in css  # shared stacked-table pattern (base.css)
 assert "@media (max-width: 900px)" in css
 assert "overflow-x: hidden" in css
 assert "scroll-padding-top" in css
@@ -128,7 +128,6 @@ assert "background-repeat: repeat, no-repeat, no-repeat" in css
 assert "background: #090e19" in css
 assert "grid-template-columns: minmax(0, 1fr) auto minmax(150px, 46%)" in css
 assert "grid-column: -2 / -1" in css
-assert ".portfolio-table td::before" in css
 assert "min-height: 44px" in css
 
 

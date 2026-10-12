@@ -10,8 +10,8 @@
 .summary-card:hover { border-color: var(--border-strong); }
 .summary-card .sc-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
 .summary-card .sc-value { font-size: 19px; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; overflow-wrap: anywhere; }
-.sc-value.green { color: #6fe0a0; }
-.sc-value.red { color: #ff8296; }
+.sc-value.green { color: var(--ok); }
+.sc-value.red { color: var(--danger); }
 
 .empty-note { color: var(--muted); padding: 28px 0; text-align: center; }
 .page-status { min-height: 1.2em; color: var(--muted); font-size: 13px; }
@@ -19,24 +19,6 @@
 /* ---------- responsive: portfolio page ---------- */
 @media (max-width: 768px) {
   .summary-grid { grid-template-columns: repeat(2, 1fr); }
-  .portfolio-table { overflow: visible; padding: 0; background: transparent; border: 0; box-shadow: none; }
-  .portfolio-table table, .portfolio-table tbody, .portfolio-table tr, .portfolio-table td { display: block; width: 100%; }
-  .portfolio-table caption { padding: 4px 2px 9px; }
-  .portfolio-table thead { display: none; }
-  .portfolio-table tr {
-    margin-bottom: 12px; padding: 10px 14px; border: 1px solid var(--border);
-    border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow);
-  }
-  .portfolio-table td {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px;
-    min-height: 38px; padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.055);
-    white-space: normal; text-align: right;
-  }
-  .portfolio-table td:last-child { border-bottom: 0; }
-  .portfolio-table td::before {
-    content: attr(data-label); flex: none; color: var(--muted); font-size: 10px;
-    font-weight: 700; letter-spacing: 0.065em; text-align: left; text-transform: uppercase;
-  }
 }
 
 @media (max-width: 560px) {
@@ -49,12 +31,12 @@
   display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline;
   margin-bottom: 16px; padding: 11px 14px;
   border: 1px solid rgba(16, 201, 115, 0.4); border-radius: 10px;
-  background: rgba(16, 201, 115, 0.07); color: #6fe0a0; font-size: 13px; line-height: 1.5;
+  background: rgba(16, 201, 115, 0.07); color: var(--ok); font-size: 13px; line-height: 1.5;
 }
-.paper-takeover a { color: #6fe0a0; text-decoration: underline; }
+.paper-takeover a { color: var(--ok); text-decoration: underline; }
 
 .killswitch-note {
-  font-size: 12px; color: #f5c66b; border-left: 3px solid rgba(245, 198, 107, 0.65);
+  font-size: 12px; color: var(--warn-soft); border-left: 3px solid rgba(245, 198, 107, 0.65);
   padding: 2px 10px;
 }
 
@@ -63,29 +45,21 @@
 .card-heading h2 { font-size: 15px; margin: 0; }
 .card-heading .secondary-btn { min-height: 36px; }
 
-.status-chip {
-  display: inline-block; padding: 2px 8px; border-radius: 999px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
-}
-.status-chip.ok { color: #6fe0a0; background: rgba(16, 201, 115, 0.12); border: 1px solid rgba(16, 201, 115, 0.35); }
-.status-chip.bad { color: #ff8296; background: rgba(244, 88, 107, 0.12); border: 1px solid rgba(244, 88, 107, 0.4); }
-.status-chip.live { color: #7ab8ff; background: rgba(90, 156, 255, 0.12); border: 1px solid rgba(90, 156, 255, 0.4); }
-.status-chip.muted { color: var(--muted); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); }
-.order-error { display: block; margin-top: 3px; color: #f7a3b0; font-size: 11px; max-width: 260px; }
+.order-error { display: block; margin-top: 3px; color: var(--danger); font-size: 11px; max-width: 260px; }
 
 .side-chip { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-.side-chip.buy { color: #6fe0a0; }
-.side-chip.sell { color: #ff8296; }
+.side-chip.buy { color: var(--ok); }
+.side-chip.sell { color: var(--danger); }
 
 .cancel-btn {
   border: 1px solid rgba(244, 88, 107, 0.45); border-radius: 8px; cursor: pointer;
-  background: transparent; color: #ff8296; font-size: 12px; font-weight: 600; padding: 5px 11px;
+  background: transparent; color: var(--danger); font-size: 12px; font-weight: 600; padding: 5px 11px;
 }
 .cancel-btn:hover { background: rgba(244, 88, 107, 0.1); }
 
 .equity-chart { margin: 4px 0 6px; }
 .equity-chart svg { display: block; width: 100%; height: 130px; }
-.equity-chart .poly { fill: none; stroke: #6fe0a0; stroke-width: 2; }
+.equity-chart .poly { fill: none; stroke: var(--ok); stroke-width: 2; }
 .equity-chart .baseline { stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; stroke-dasharray: 4 4; }
 .equity-table-holder summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .equity-table-holder table { margin-top: 8px; }

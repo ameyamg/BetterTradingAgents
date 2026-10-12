@@ -2,9 +2,10 @@
 
 const $ = (id) => document.getElementById(id);
 const CLIENT_ID_KEY = "bta:clientId";
-const OUTLOOK_LABELS = { day_trade: "Day trading", short_term: "Short term", long_term: "Long term" };
-const DEPTH_LABELS = { fast: "Fast", medium: "Medium", expert: "Expert" };
-const TICKER_PATTERN = /^[A-Z0-9.\-]{1,10}$/;
+const {
+  DEPTH_LABELS, OUTLOOK_LABELS, TICKER_PATTERN, decisionBadge, escapeAttr,
+  escapeHtml, evidenceLabel, getClientId, showToast,
+} = window.BTA_UI;
 const MAX_HINT = { limit: 5 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -40,7 +41,7 @@ async function loadWatchlist() {
   $("watch-status").textContent = "Loading watchlist…";
   try {
     const response = await fetch("/api/watchlist", {
-      headers: { "X-Client-ID": getClientId() },
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
     });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     const items = await response.json();
@@ -50,7 +51,7 @@ async function loadWatchlist() {
       : "No watched tickers";
   } catch (error) {
     $("watch-status").textContent = "Watchlist could not be loaded.";
-    showToast(`Could not load watchlist: ${error.message}`);
+    showToast(`Could not load watchlist: ${error.message}`, true);
   } finally {
     $("refresh-watchlist").disabled = false;
   }
@@ -166,23 +167,7 @@ function changeStatus(item) {
   return { className: "pending", icon: "○", label: "Not reanalyzed", title: "No newer completed analysis since the baseline was saved" };
 }
 
-function decisionBadge(decision) {
-  if (!decision) return '<span class="muted">n/a</span>';
-  const meta = {
-    BUY: { className: "buy", icon: "▲" },
-    HOLD: { className: "hold", icon: "■" },
-    SELL: { className: "sell", icon: "▼" },
-  }[decision] || { className: "hold", icon: "■" };
-  return `<span class="decision ${meta.className}"><span class="d-icon" aria-hidden="true">${meta.icon}</span>${escapeHtml(decision)}</span>`;
-}
 
-function evidenceLabel(confidence) {
-  if (confidence == null) return "n/a";
-  const pct = Math.round(confidence * 100);
-  if (pct >= 70) return "Strong evidence";
-  if (pct >= 50) return "Moderate evidence";
-  return "Low evidence";
-}
 
 function selectedTickers() {
   return [...document.querySelectorAll(".watch-item")]
@@ -241,7 +226,7 @@ async function addManual() {
   try {
     const response = await fetch("/api/watchlist", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Client-ID": getClientId() },
+      headers: { "Content-Type": "application/json", "X-Client-ID": getClientId(CLIENT_ID_KEY) },
       body: JSON.stringify({ ticker, note }),
     });
     const body = await response.json().catch(() => ({}));
@@ -262,13 +247,13 @@ async function removeItem(id, ticker) {
   try {
     const response = await fetch(`/api/watchlist/${id}`, {
       method: "DELETE",
-      headers: { "X-Client-ID": getClientId() },
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
     });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     showToast(`${ticker} removed`);
     await loadWatchlist();
   } catch (error) {
-    showToast(`Could not remove ${ticker}: ${error.message}`);
+    showToast(`Could not remove ${ticker}: ${error.message}`, true);
   }
 }
 
@@ -277,30 +262,17 @@ async function clearWatchlist() {
   try {
     const response = await fetch("/api/watchlist", {
       method: "DELETE",
-      headers: { "X-Client-ID": getClientId() },
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
     });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     const result = await response.json();
     showToast(`${result.deleted} ticker${result.deleted === 1 ? "" : "s"} removed`, false);
     await loadWatchlist();
   } catch (error) {
-    showToast(`Could not clear watchlist: ${error.message}`);
+    showToast(`Could not clear watchlist: ${error.message}`, true);
   }
 }
 
-function getClientId() {
-  try {
-    const existing = localStorage.getItem(CLIENT_ID_KEY);
-    if (existing) return existing;
-    const created = globalThis.crypto?.randomUUID
-      ? globalThis.crypto.randomUUID()
-      : `device_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(CLIENT_ID_KEY, created);
-    return created;
-  } catch (_) {
-    return `device_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-}
 
 function formatStamp(value) {
   const date = new Date(value);
@@ -308,21 +280,5 @@ function formatStamp(value) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text == null ? "" : String(text);
-  return div.innerHTML;
-}
 
-function escapeAttr(text) {
-  return escapeHtml(text).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}
 
-function showToast(message, isError = true) {
-  const toast = $("toast");
-  toast.textContent = message;
-  toast.classList.toggle("error", isError);
-  toast.setAttribute("role", isError ? "alert" : "status");
-  toast.classList.remove("hidden");
-  window.setTimeout(() => toast.classList.add("hidden"), 4200);
-}

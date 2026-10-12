@@ -1,12 +1,12 @@
 /* Run lifecycle: start, stream, cancel, finish, restore, and rerun. */
 
-import { CLIENT_ID_KEY, LAST_RUN_KEY } from "./constants.js?v=12";
-import { activeAgents, setDepth, setOutlook } from "./options.js?v=12";
-import { state } from "./state.js?v=12";
-import { addTickerTags, setTickerTags } from "./tickers.js?v=12";
-import { handleEvent, updateOverallProgress, updateProgress } from "./events.js?v=12";
-import { labelFor, renderProgressCard, renderResultCard, renderSummaryTable, setAgentStatus, setHeader } from "./render.js?v=14";
-import { $, getClientId, hideError, showError, showToast } from "./util.js?v=12";
+import { CLIENT_ID_KEY, LAST_RUN_KEY } from "./constants.js";
+import { activeAgents, setDepth, setOutlook } from "./options.js";
+import { state } from "./state.js";
+import { addTickerTags, setTickerTags } from "./tickers.js";
+import { handleEvent, updateOverallProgress, updateProgress } from "./events.js";
+import { labelFor, renderProgressCard, renderResultCard, renderSummaryTable, setAgentStatus, setHeader } from "./render.js";
+import { $, getClientId, hideError, showError, showToast } from "./util.js";
 
 function storedRunId() {
   try { return localStorage.getItem(LAST_RUN_KEY); } catch (_) { return null; }

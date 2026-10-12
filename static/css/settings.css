@@ -187,13 +187,15 @@
 
 /* ---- sticky save bar ---------------------------------------------------------- */
 
+html { scroll-padding-bottom: 96px; }
+
 .save-bar {
   backdrop-filter: blur(6px);
-  background: rgba(12, 21, 38, 0.92);
+  background: rgba(12, 21, 38, 0.97);
   border: 1px solid var(--border-strong);
   border-radius: 12px;
   bottom: 12px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 -10px 26px rgba(0, 0, 0, 0.38), var(--shadow);
   display: flex;
   align-items: center;
   gap: 10px;

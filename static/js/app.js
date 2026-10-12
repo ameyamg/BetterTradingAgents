@@ -1,13 +1,13 @@
 /* BetterTradingAgents - analysis screen entry point.
    Wires the DOM and boots recovery / rerun, then hands off to run.js. */
 
-import { ADVANCED_OPEN_KEY, CLIENT_ID_KEY, DEPTH_KEY, OUTLOOK_KEY } from "./constants.js?v=12";
-import { setDepth, setIncognito, setOutlook, updateAdvancedSummary, updateDepthLabels, wireRadioGroups } from "./options.js?v=12";
-import { downloadReport } from "./report.js?v=12";
-import { state } from "./state.js?v=12";
-import { addTickerTags, analyzeAnother, removeTickerTag, renderTickerTags } from "./tickers.js?v=12";
-import { applyRerunParams, cancelRun, feelingLucky, restoreSavedRun, startAnalysis } from "./run.js?v=12";
-import { $, getClientId } from "./util.js?v=12";
+import { ADVANCED_OPEN_KEY, CLIENT_ID_KEY, DEPTH_KEY, OUTLOOK_KEY } from "./constants.js";
+import { setDepth, setIncognito, setOutlook, updateAdvancedSummary, updateDepthLabels, wireRadioGroups } from "./options.js";
+import { downloadReport } from "./report.js";
+import { state } from "./state.js";
+import { addTickerTags, analyzeAnother, removeTickerTag, renderTickerTags } from "./tickers.js";
+import { applyRerunParams, cancelRun, feelingLucky, restoreSavedRun, startAnalysis } from "./run.js";
+import { $, getClientId } from "./util.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   $("analyze-btn").addEventListener("click", () => startAnalysis());
@@ -59,12 +59,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   try {
     const response = await fetch("/api/health");
     const health = await response.json();
-    if (health.mock_mode) $("mode-chip").classList.remove("hidden");
+    const modeChip = $("mode-chip");
+    if (health.mock_mode && modeChip) modeChip.classList.remove("hidden");
     state.debateRounds = health.debate_rounds || 1;
     state.maxTickers = health.max_tickers || 5;
     updateDepthLabels();
     const providers = health.providers || {};
-    $("provider-line").textContent =
+    const providerLine = $("provider-line");
+    if (providerLine) providerLine.textContent =
       `data: ${[providers.prices, providers.fundamentals, providers.news_search, providers.forecast].filter((s) => s && s !== "disabled").join(" · ")}` +
       ` · model: ${health.llm_model || "mock"}`;
   } catch (_) {

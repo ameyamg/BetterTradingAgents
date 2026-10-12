@@ -18,6 +18,17 @@
   --radius: 14px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.32);
   --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* State colors: one hue per meaning. Soft reads as body text on dark
+     surfaces; the strong/--buy/--hold/--sell trio fills marks and borders. */
+  --ok: var(--ok);
+  --warn: var(--warn);
+  --warn-soft: var(--warn-soft);
+  --danger: var(--danger);
+  --info: var(--info);
+  /* Radii: inline controls, mid-size surfaces, cards (--radius), pills. */
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-pill: 999px;
 }
 
 * { box-sizing: border-box; }
@@ -150,7 +161,7 @@ h2 {
   text-transform: uppercase; letter-spacing: 0.08em;
 }
 
-.eyebrow { color: #6fda9e; font-size: 10px; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
+.eyebrow { color: var(--ok); font-size: 10px; font-weight: 750; letter-spacing: 0.1em; text-transform: uppercase; }
 
 /* ---------- shared buttons ---------- */
 .secondary-btn, .table-open-btn {
@@ -170,9 +181,9 @@ button, input, summary { touch-action: manipulation; }
   padding: 5px 13px; border-radius: 9px; border: 1px solid; letter-spacing: 0.05em; flex: none;
 }
 .decision .d-icon { font-size: 11px; }
-.decision.buy { color: #6fe0a0; border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.1); }
-.decision.hold { color: #ffc75e; border-color: rgba(245, 165, 36, 0.4); background: rgba(245, 165, 36, 0.1); }
-.decision.sell { color: #ff8296; border-color: rgba(244, 88, 107, 0.4); background: rgba(244, 88, 107, 0.1); }
+.decision.buy { color: var(--ok); border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.1); }
+.decision.hold { color: var(--warn); border-color: rgba(245, 165, 36, 0.4); background: rgba(245, 165, 36, 0.1); }
+.decision.sell { color: var(--danger); border-color: rgba(244, 88, 107, 0.4); background: rgba(244, 88, 107, 0.1); }
 
 /* ---------- shared add-position rows (analysis result cards + portfolio) ---------- */
 .add-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; padding-top: 14px; border-top: 1px dashed var(--border-strong); flex-wrap: wrap; }
@@ -184,7 +195,7 @@ button, input, summary { touch-action: manipulation; }
 }
 .add-row input:focus { border-color: rgba(16, 201, 115, 0.65); }
 .add-btn {
-  background: rgba(34, 197, 94, 0.12); color: #6fe0a0; border: 1px solid rgba(34, 197, 94, 0.4);
+  background: rgba(34, 197, 94, 0.12); color: var(--ok); border: 1px solid rgba(34, 197, 94, 0.4);
   border-radius: 9px; padding: 7px 14px; font-size: 13px; font-weight: 600; font-family: var(--font);
   cursor: pointer; transition: background 0.15s, box-shadow 0.15s;
 }
@@ -210,7 +221,7 @@ td.num, th.num { text-align: right; }
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5);
   animation: card-in 0.2s ease; z-index: 50;
 }
-.toast.error { border-color: rgba(244, 88, 107, 0.5); color: #f7a3b0; }
+.toast.error { border-color: rgba(244, 88, 107, 0.5); color: var(--danger); }
 
 footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 44px; }
 
@@ -234,7 +245,7 @@ footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wr
 .filter-drawer[open] summary::after { content: "▴"; }
 .filter-count {
   min-width: 20px; padding: 1px 7px; border-radius: 999px; text-align: center;
-  color: #75dda0; background: rgba(16, 201, 115, 0.12); font-size: 11px;
+  color: var(--ok); background: rgba(16, 201, 115, 0.12); font-size: 11px;
 }
 .filters-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px; border-top: 1px dashed var(--border-strong); }
 .filters-bar input, .filters-bar select {
@@ -250,10 +261,10 @@ footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wr
   background: rgba(16, 201, 115, 0.08); font-size: 11.5px;
 }
 .chip-remove {
-  padding: 2px 8px; border: 0; border-radius: 999px; color: #75dda0; background: transparent;
+  padding: 2px 8px; border: 0; border-radius: 999px; color: var(--ok); background: transparent;
   font-size: 13px; line-height: 1; cursor: pointer;
 }
-.chip-remove:hover { color: #0b2b1a; background: #75dda0; }
+.chip-remove:hover { color: #0b2b1a; background: var(--ok); }
 .chip-clear {
   border: 0; background: none; color: var(--muted); font: 600 11.5px var(--font);
   text-decoration: underline; text-underline-offset: 2px; cursor: pointer; padding: 4px 6px;
@@ -305,5 +316,67 @@ footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wr
 }
 
 /* Shared P&L coloring (portfolio + trading pages). */
-.pnl-green { color: #6fe0a0; }
-.pnl-red { color: #ff8296; }
+.pnl-green { color: var(--ok); }
+.pnl-red { color: var(--danger); }
+
+/* ---------- status chips (orders, sessions, automation) ---------- */
+.status-chip {
+  display: inline-block; padding: 2px 8px; border-radius: var(--r-pill);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.status-chip.ok { color: var(--ok); background: rgba(16, 201, 115, 0.12); border: 1px solid rgba(16, 201, 115, 0.35); }
+.status-chip.bad { color: var(--danger); background: rgba(244, 88, 107, 0.12); border: 1px solid rgba(244, 88, 107, 0.4); }
+.status-chip.live { color: var(--info); background: rgba(90, 156, 255, 0.12); border: 1px solid rgba(90, 156, 255, 0.4); }
+.status-chip.muted { color: var(--muted); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); }
+
+/* ---------- dangerous action button (clear history, remove, compare off) ---------- */
+.danger-btn {
+  min-height: 36px; padding: 7px 12px; border: 1px solid rgba(244, 88, 107, 0.42);
+  border-radius: var(--r-sm); color: var(--danger); background: rgba(244, 88, 107, 0.08);
+  cursor: pointer; font: 600 12px var(--font); transition: background 0.15s, border-color 0.15s;
+}
+.danger-btn:hover { background: rgba(244, 88, 107, 0.15); border-color: rgba(244, 88, 107, 0.7); }
+.danger-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ---------- inline status flags (warn/ok text beside a call) ---------- */
+.flag-warn { color: var(--warn-soft); font-size: 12px; }
+.flag-ok { color: var(--ok); font-size: 12px; }
+
+/* ---------- stacked tables on narrow screens: one pattern for all pages ---------- */
+@media (max-width: 768px) {
+  .table-wrap:has(> table.stack) { overflow: visible; padding: 0; background: transparent; border: 0; box-shadow: none; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; max-width: 100%; }
+  table.stack thead { display: none; }
+  table.stack tr {
+    margin-bottom: 12px; padding: 10px 14px; overflow: hidden;
+    border: 1px solid var(--border); border-radius: var(--r-md);
+    background: var(--panel); box-shadow: var(--shadow);
+  }
+  table.stack td {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    min-width: 0; min-height: 38px; padding: 7px 0; border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+    white-space: normal; text-align: right;
+  }
+  table.stack td:last-child { border-bottom: 0; }
+  table.stack td::before {
+    content: attr(data-label); flex: 0 0 auto; color: var(--muted); font-size: 10px;
+    font-weight: 700; letter-spacing: 0.065em; text-transform: uppercase; text-align: left;
+  }
+  table.stack td > * { min-width: 0; }
+}
+
+/* ---------- print: readable light sheets on every page ---------- */
+@media print {
+  @page { margin: 12mm; }
+  html { color-scheme: light; }
+  body { background: #fff !important; background-image: none !important; color: #111; }
+  .skip-link, header, footer, #toast, .filters-bar, .filter-drawer, button, input, select { display: none !important; }
+  .card, .summary-card, .agg-card, .grading-explainer, .table-wrap {
+    background: #fff !important; border-color: #bbb !important; box-shadow: none !important;
+  }
+  a { color: #111; text-decoration: underline; }
+  .muted, .hint, small, caption { color: #444 !important; }
+  th { color: #333 !important; }
+  td, th, tbody tr { border-color: #ccc !important; }
+}

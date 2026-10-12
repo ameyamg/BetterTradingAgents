@@ -1,7 +1,7 @@
 /* Save a finished analysis to the SQLite watchlist (ROADMAP P1.4). */
 
-import { $, getClientId, showToast } from "./util.js?v=12";
-import { CLIENT_ID_KEY } from "./constants.js?v=12";
+import { $, getClientId, showToast } from "./util.js";
+import { CLIENT_ID_KEY } from "./constants.js";
 
 export async function saveToWatchlist(ticker, runId, note = "") {
   const button = $(`watch-${ticker}`);

@@ -2,6 +2,7 @@
    performance (ROADMAP P1.9). One fetch, all rendering client-side. */
 
 const $ = (id) => document.getElementById(id);
+const { decisionBadge, escapeAttr, escapeHtml } = window.BTA_UI;
 
 const DECISION_META = {
   BUY: { className: "buy", icon: "▲", label: "BUY" },
@@ -15,15 +16,7 @@ const VERDICT_META = {
   unknown: { className: "neutral", label: "Unknown" },
 };
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (ch) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[ch]);
-}
 
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, "&#96;");
-}
 
 function money(pct) {
   if (pct == null) return '<span class="muted">n/a</span>';
@@ -31,15 +24,11 @@ function money(pct) {
   return `${dollars < 0 ? "-" : "+"}$${Math.abs(Math.round(dollars)).toLocaleString("en-US")}`;
 }
 
-function badge(decision) {
-  const meta = DECISION_META[decision] || DECISION_META.HOLD;
-  return `<span class="decision ${meta.className}">${meta.icon} ${meta.label}</span>`;
-}
 
 function verdictPill(row) {
   const meta = VERDICT_META[row.verdict] || VERDICT_META.unknown;
   const why = row.lesson ? ` title="${escapeAttr(row.lesson)}"` : "";
-  return `<span class="verdict ${meta.className}"${why}>${meta.label}</span>`;
+  return `<span class="accuracy-verdict ${meta.className}"${why}>${meta.label}</span>`;
 }
 
 function pct(value, digits = 1) {
@@ -81,7 +70,7 @@ function renderRows(report) {
   tbody.innerHTML = report.rows.map((row) => `<tr>
     <td><strong>${escapeHtml(row.ticker)}</strong></td>
     <td>${escapeHtml(row.date)}</td>
-    <td>${badge(row.decision)}</td>
+    <td>${decisionBadge(row.decision)}</td>
     <td class="num">${Math.round((row.confidence || 0) * 100)}%</td>
     <td class="num">$${Number(row.entry_price || 0).toFixed(2)}</td>
     <td class="num">${pct(row.realized_return_pct)}</td>

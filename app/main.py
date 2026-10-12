@@ -9,10 +9,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import accuracy, automation, broker, calibration, chat, memory, settings_store, watchlist
+from app import accuracy, automation, broker, calibration, chat, memory, pages, settings_store, watchlist
 from app.config import settings
 from app.discovery import discover_stocks
 from app.models import (
@@ -54,20 +54,6 @@ app = FastAPI(title="BetterTradingAgents")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-@app.middleware("http")
-async def static_revalidate(request, call_next):
-    """Browsers revalidate assets and pages instead of trusting heuristics.
-
-    The ES modules import each other (version-stamped once at the rename),
-    and a stale cached constants.js once showed the old agent list after an
-    update. no-cache keeps assets cached but forces a cheap 304 check every
-    load, so code changes reach the browser on the next refresh.
-    """
-    response = await call_next(request)
-    response.headers["Cache-Control"] = "no-cache"
-    return response
-
-
 def _origin_authority(origin: str) -> str:
     """The host[:port] part of an Origin header, lowercased."""
     return urlparse(origin.lower()).netloc
@@ -98,26 +84,16 @@ async def local_only_guard(request, call_next):
 
 @app.middleware("http")
 async def revalidate_assets(request, call_next):
-    """Never let the browser serve a stale UI mix (old CSS + new markup).
+    """Every response revalidates: no stale UI mixes, no manual version bumps.
 
-    Static files only carry ETag/Last-Modified, so browsers heuristic-cache
-    them and may skip revalidation entirely; since the files change in place,
-    that can pair a stale stylesheet with fresh HTML - visibly broken layout.
-    "no-cache" means revalidate before use (unchanged files still 304), and
-    the ?v= bumps on asset URLs then always resolve to a consistent set.
+    Static files carry ETag/Last-Modified but would otherwise be heuristic
+    cached; no-cache forces a cheap revalidation (unchanged files still 304),
+    so a code change reaches the browser on the next refresh. Pages are
+    server-rendered (app/pages.py), and the old ?v= asset stamps are gone:
+    ETags already key every URL to its current bytes.
     """
     response = await call_next(request)
-    path = request.url.path
-    if path.startswith(("/static/", "/api/")) or path in (
-        "/",
-        "/settings",
-        "/portfolio",
-        "/history",
-        "/accuracy",
-        "/watchlist",
-        "/compare",
-    ):
-        response.headers["Cache-Control"] = "no-cache"
+    response.headers["Cache-Control"] = "no-cache"
     return response
 
 
@@ -136,24 +112,33 @@ async def startup() -> None:
     logger.info("[startup] BetterTradingAgents ready | llm=%s", mode)
 
 
+def _page(filename: str, active: str):
+    """Render one page shell: shared nav, live feature toggles, current page."""
+    return pages.render_page(
+        filename,
+        active,
+        {key: _feature_enabled(key) for key, _label, _href in pages.FEATURE_LINKS},
+    )
+
+
 @app.get("/")
 async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    return _page("index.html", "home")
 
 
 @app.get("/settings")
 async def settings_page():
-    return FileResponse(STATIC_DIR / "settings.html")
+    return _page("settings.html", "settings")
 
 
 @app.get("/portfolio")
 async def portfolio_page():
-    return FileResponse(STATIC_DIR / "portfolio.html")
+    return _page("portfolio.html", "trades")
 
 
 @app.get("/history")
 async def history_page():
-    return FileResponse(STATIC_DIR / "history.html")
+    return _page("history.html", "history")
 
 
 def _feature_enabled(name: str) -> bool:
@@ -178,21 +163,21 @@ async def features():
 async def accuracy_page():
     if not _feature_enabled("accuracy"):
         raise HTTPException(status_code=404, detail="the accuracy page is disabled")
-    return FileResponse(STATIC_DIR / "accuracy.html")
+    return _page("accuracy.html", "accuracy")
 
 
 @app.get("/watchlist")
 async def watchlist_page():
     if not _feature_enabled("watchlist"):
         raise HTTPException(status_code=404, detail="the watchlist page is disabled")
-    return FileResponse(STATIC_DIR / "watchlist.html")
+    return _page("watchlist.html", "watchlist")
 
 
 @app.get("/compare")
 async def compare_page():
     if not _feature_enabled("compare"):
         raise HTTPException(status_code=404, detail="the compare page is disabled")
-    return FileResponse(STATIC_DIR / "compare.html")
+    return _page("compare.html", "compare")
 
 
 @app.get("/trading")

@@ -2,13 +2,12 @@
    Selection state lives in the URL so the view refreshes and shares. */
 
 import {
-  $, escapeHtml, escapeAttr, fmtUsd, formatDateTime, getClientId, showToast,
-} from "./util.js?v=12";
-import { CLIENT_ID_KEY, OUTLOOK_LABELS } from "./constants.js?v=12";
+  $, decisionBadge, escapeHtml, escapeAttr, evidenceLabel, fmtUsd,
+  formatDateTime, getClientId, showToast,
+} from "./util.js";
+import { CLIENT_ID_KEY, DEPTH_LABELS, OUTLOOK_LABELS, TICKER_PATTERN } from "./constants.js";
 
 const MAX_ITEMS = 3;
-const DEPTH_LABELS = { fast: "Fast", medium: "Medium", expert: "Expert" };
-const TICKER_PATTERN = /^[A-Z0-9.\-]{1,10}$/;
 
 let runMeta = new Map(); // run_id -> /api/runs row
 let items = []; // [{ runId, ticker, analysis | null }]
@@ -232,20 +231,4 @@ function dataAge(a) {
   return `<strong>${q.stale ? '<span class="flag-warn">' : ""}${age} old${q.stale ? " · stale</span>" : ""}</strong><small>${escapeHtml(formatDateTime(q.as_of || a.as_of))}</small>`;
 }
 
-function decisionBadge(decision) {
-  if (!decision) return '<span class="muted">n/a</span>';
-  const meta = {
-    BUY: { className: "buy", icon: "▲" },
-    HOLD: { className: "hold", icon: "■" },
-    SELL: { className: "sell", icon: "▼" },
-  }[decision] || { className: "hold", icon: "■" };
-  return `<span class="decision ${meta.className}"><span class="d-icon" aria-hidden="true">${meta.icon}</span>${escapeHtml(decision)}</span>`;
-}
 
-function evidenceLabel(confidence) {
-  if (confidence == null) return "n/a";
-  const pct = Math.round(confidence * 100);
-  if (pct >= 70) return "Strong evidence";
-  if (pct >= 50) return "Moderate evidence";
-  return "Low evidence";
-}

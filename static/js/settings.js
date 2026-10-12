@@ -6,7 +6,8 @@
    an explicit "clear" checkbox. */
 
 const $ = (id) => document.getElementById(id);
-const esc = (value) => String(value).replace(/[&<>"']/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const esc = window.BTA_UI.escapeHtml;
+const showToast = window.BTA_UI.showToast;
 
 let spec = null;
 let autopilot = null;
@@ -14,13 +15,6 @@ let autopilot = null;
 let originals = {};
 let activeTab = localStorage.getItem("bta_settings_tab") || "";
 
-function showToast(message, isError = false) {
-  const toast = $("toast");
-  toast.textContent = message;
-  toast.className = `toast${isError ? " error" : ""}`;
-  window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 4200);
-}
 
 const SOURCE_TEXT = {
   keychain: "OS keychain",

@@ -138,8 +138,8 @@ async def checks() -> None:
             assert marker in css_text, f"print CSS missing: {marker}"
         home = await client.get("/")
         assert home.status_code == 200
-        # The cache-bust version bumps with every CSS change; match any v=N.
-        assert re.search(r"/static/css/analysis\.css\?v=\d+", home.text), "analysis page must load the print CSS"
+        # No manual version stamps anymore: assets revalidate via no-cache + ETag.
+        assert "/static/css/analysis.css" in home.text, "analysis page must load the print CSS"
         print("print stylesheet OK")
 
         # ---- JS assets ship the client-side logic ----

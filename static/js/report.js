@@ -2,10 +2,10 @@
    from the in-memory run. The server kept nothing, so this file (or Print
    brief) is the only way to keep the report. */
 
-import { EVIDENCE_META, OUTLOOK_LABELS } from "./constants.js?v=12";
-import { depthProfile } from "./options.js?v=12";
-import { state } from "./state.js?v=12";
-import { escapeAttr, escapeHtml, safeUrl, showToast } from "./util.js?v=12";
+import { EVIDENCE_META, OUTLOOK_LABELS } from "./constants.js";
+import { depthProfile } from "./options.js";
+import { state } from "./state.js";
+import { escapeAttr, escapeHtml, safeUrl, showToast } from "./util.js";
 
 const REPORT_CSS = `
   :root { color-scheme: light; }

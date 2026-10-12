@@ -2,7 +2,7 @@
    Native SVG only, no charting dependency. Every mark is also stated in the
    text summary below the graphic, so color and pointer input are never needed. */
 
-import { escapeHtml } from "./util.js?v=12";
+import { escapeHtml } from "./util.js";
 
 const W = 640;
 const H = 170;

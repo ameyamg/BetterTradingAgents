@@ -24,24 +24,6 @@
 }
 .compare-toolbar { display: flex; gap: 8px; flex: none; }
 
-.danger-btn {
-  min-height: 36px;
-  padding: 7px 12px;
-  border: 1px solid rgba(244, 88, 107, 0.42);
-  border-radius: 9px;
-  color: #ff98a8;
-  background: rgba(244, 88, 107, 0.08);
-  cursor: pointer;
-  font: 600 12px var(--font);
-  transition: background 0.15s, border-color 0.15s;
-}
-.danger-btn:hover {
-  background: rgba(244, 88, 107, 0.15);
-  border-color: rgba(244, 88, 107, 0.7);
-}
-.danger-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.flag-warn { color: #ff98a8; }
 .flag-list { display: flex; flex-direction: column; gap: 3px; }
 
 .compare-add-card { margin-bottom: 18px; }

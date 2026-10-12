@@ -5,7 +5,8 @@
    local demo ledger anymore. */
 
 const $ = (id) => document.getElementById(id);
-const esc = (value) => String(value).replace(/[&<>"']/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const esc = window.BTA_UI.escapeHtml;
+const showToast = window.BTA_UI.showToast;
 const fmt = (value) => (value == null ? "n/a" : `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const fmtUsd0 = (value) => (value == null ? "n/a" : `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
 
@@ -14,13 +15,6 @@ const PAPER_TERMINAL = new Set(["filled", "canceled", "expired", "rejected"]);
 
 let paperPositions = [];
 
-function showToast(message, isError = false) {
-  const toast = $("toast");
-  toast.textContent = message;
-  toast.className = `toast${isError ? " error" : ""}`;
-  window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 4200);
-}
 
 function setUnconfigured(detail) {
   $("paper-takeover").classList.add("hidden");

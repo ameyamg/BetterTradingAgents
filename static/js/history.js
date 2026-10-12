@@ -4,8 +4,10 @@
 
 const $ = (id) => document.getElementById(id);
 const CLIENT_ID_KEY = "bta:clientId";
-const OUTLOOK_LABELS = { day_trade: "Day trading", short_term: "Short term", long_term: "Long term" };
-const DEPTH_LABELS = { fast: "Fast", medium: "Medium", expert: "Expert" };
+const {
+  DEPTH_LABELS, OUTLOOK_LABELS, decisionBadge, escapeAttr, escapeHtml,
+  fmtCostUsd, getClientId, showToast,
+} = window.BTA_UI;
 
 let allRuns = [];
 const filters = { q: "", status: "", outlook: "", depth: "", decision: "", from: "", to: "" };
@@ -170,14 +172,14 @@ async function loadHistory() {
   $("history-status").textContent = "Loading run history…";
   try {
     const response = await fetch("/api/runs?limit=100", {
-      headers: { "X-Client-ID": getClientId() },
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
     });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     allRuns = await response.json();
     renderHistory(visibleRuns());
   } catch (error) {
     $("history-status").textContent = "Run history could not be loaded.";
-    showToast(`Could not load run history: ${error.message}`);
+    showToast(`Could not load run history: ${error.message}`, true);
   } finally {
     $("refresh-history").disabled = false;
   }
@@ -210,7 +212,7 @@ async function clearHistory() {
   try {
     const response = await fetch("/api/runs", {
       method: "DELETE",
-      headers: { "X-Client-ID": getClientId() },
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
     });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     const result = await response.json();
@@ -218,7 +220,7 @@ async function clearHistory() {
     showToast(`${result.deleted} saved run${result.deleted === 1 ? "" : "s"} deleted`, false);
   } catch (error) {
     $("clear-history").disabled = false;
-    showToast(`Could not clear run history: ${error.message}`);
+    showToast(`Could not clear run history: ${error.message}`, true);
   } finally {
     $("refresh-history").disabled = false;
   }
@@ -238,7 +240,7 @@ async function exportRunJson(runId, button) {
     const blob = new Blob([await response.text()], { type: "application/json" });
     downloadFile(`bta-run-${runId}.json`, blob);
   } catch (error) {
-    showToast(`Could not download run ${runId}: ${error.message}`);
+    showToast(`Could not download run ${runId}: ${error.message}`, true);
   } finally {
     button.disabled = false;
   }
@@ -307,14 +309,6 @@ function runState(run) {
   return { className: "complete", icon: "✓", label: "Completed" };
 }
 
-function decisionBadge(decision) {
-  const meta = {
-    BUY: { className: "buy", icon: "▲" },
-    HOLD: { className: "hold", icon: "■" },
-    SELL: { className: "sell", icon: "▼" },
-  }[decision] || { className: "hold", icon: "■" };
-  return `<span class="decision ${meta.className}"><span aria-hidden="true">${meta.icon}</span>${escapeHtml(decision)}</span>`;
-}
 
 function formatDateTime(timestamp) {
   const date = new Date(Number(timestamp) * 1000);
@@ -324,43 +318,7 @@ function formatDateTime(timestamp) {
 
 // Estimated model cost: per-run totals are cents, so keep more decimals
 // until whole dollars make them noise (matches util.js fmtCostUsd).
-function fmtCostUsd(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) return "$0";
-  if (n < 1) return `$${n.toFixed(4)}`;
-  if (n < 1000) return `$${n.toFixed(2)}`;
-  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
 
-function showToast(message, isError = true) {
-  const toast = $("toast");
-  toast.textContent = message;
-  toast.classList.toggle("error", isError);
-  toast.setAttribute("role", isError ? "alert" : "status");
-  toast.classList.remove("hidden");
-  window.setTimeout(() => toast.classList.add("hidden"), 4200);
-}
 
-function getClientId() {
-  try {
-    const existing = localStorage.getItem(CLIENT_ID_KEY);
-    if (existing) return existing;
-    const created = globalThis.crypto?.randomUUID
-      ? globalThis.crypto.randomUUID()
-      : `device_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    localStorage.setItem(CLIENT_ID_KEY, created);
-    return created;
-  } catch (_) {
-    return `device_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  }
-}
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text == null ? "" : String(text);
-  return div.innerHTML;
-}
 
-function escapeAttr(text) {
-  return escapeHtml(text).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
-}

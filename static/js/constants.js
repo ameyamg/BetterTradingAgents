@@ -30,12 +30,13 @@ export const RESEARCH_KEYS = ["market", "technical", "fundamental", "news", "sen
 
 export const LAST_RUN_KEY = "bta:lastRunId";
 export const CLIENT_ID_KEY = "bta:clientId";
-export const TICKER_PATTERN = /^[A-Z0-9.\-]{1,10}$/;
+/* Shared with the classic pages via window.BTA_UI (static/js/ui.js). */
+export const TICKER_PATTERN = window.BTA_UI.TICKER_PATTERN;
 // Mirrors STREAM_WINDOW_CHARS in app/workflow.py: the reasoning pane keeps the
 // tail of each agent's token stream (the server caps the total it forwards).
 export const STREAM_WINDOW_CHARS = 2048;
 export const OUTLOOKS = ["day_trade", "short_term", "long_term"];
-export const OUTLOOK_LABELS = { day_trade: "Day trading", short_term: "Short term", long_term: "Long term" };
+export const OUTLOOK_LABELS = window.BTA_UI.OUTLOOK_LABELS;
 export const ADVANCED_OPEN_KEY = "bta:advancedOpen";
 export const OUTLOOK_KEY = "bta:outlook";
 export const DEPTH_KEY = "bta:depth";
