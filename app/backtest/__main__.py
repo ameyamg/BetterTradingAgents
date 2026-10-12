@@ -15,7 +15,8 @@ import logging
 import sys
 from pathlib import Path
 
-AGENTS_BY_DEPTH = {"fast": 5, "medium": 7, "expert": 9}
+# Canonical depth keys and their agent counts (app/depth.py profiles).
+AGENTS_BY_DEPTH = {"fast": 3, "pro": 7, "max": 10}
 TOKENS_PER_AGENT = 2900  # rough prompt+completion budget per agent call
 
 
@@ -29,7 +30,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--end", required=True, help="last decision date, YYYY-MM-DD")
     parser.add_argument("--step", type=int, default=21, help="days between decisions")
     parser.add_argument("--horizon", type=int, default=21, help="days to hold each decision")
-    parser.add_argument("--depth", default="fast", choices=["fast", "medium", "expert"])
+    parser.add_argument("--depth", default="fast",
+                        choices=["fast", "pro", "max", "medium", "expert"],
+                        help="agent roster: fast=3 agents, pro=7, max=10 "
+                             "(medium/expert are legacy aliases of pro/max)")
     parser.add_argument("--outlook", default="short_term",
                         choices=["day_trade", "short_term", "long_term"])
     parser.add_argument("--llm", action="store_true",
@@ -83,6 +87,9 @@ def main(argv: list[str] | None = None) -> None:
     from app.backtest.data import FUNDAMENTALS_CURRENT, FUNDAMENTALS_SEC_EDGAR
     from app.backtest.experiments import parse_pair, run_paired
     from app.backtest.run import date_grid, run_backtest
+    from app.depth import normalize_depth
+
+    args.depth = normalize_depth(args.depth)
 
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     if not tickers:

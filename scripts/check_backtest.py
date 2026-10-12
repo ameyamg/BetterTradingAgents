@@ -50,6 +50,25 @@ from app.tools import sec_edgar as sec  # noqa: E402
 
 settings.llm_api_key = ""
 
+# ---- CLI depth tiers -----------------------------------------------------------
+from app.backtest.__main__ import AGENTS_BY_DEPTH, parse_args  # noqa: E402
+from app.depth import normalize_depth  # noqa: E402
+
+for name, canonical in (
+    ("fast", "fast"),
+    ("pro", "pro"),
+    ("max", "max"),
+    ("medium", "pro"),  # legacy aliases must keep parsing
+    ("expert", "max"),
+):
+    parsed = parse_args(
+        ["--tickers", "X", "--start", "2024-01-01", "--end", "2024-01-02", "--depth", name]
+    )
+    assert normalize_depth(parsed.depth) == canonical, (name, parsed.depth)
+    assert canonical in AGENTS_BY_DEPTH, (name, AGENTS_BY_DEPTH)
+assert AGENTS_BY_DEPTH["fast"] == 3 and AGENTS_BY_DEPTH["pro"] == 7 and AGENTS_BY_DEPTH["max"] == 10
+print("CLI depth tiers OK: canonical names parse, legacy aliases normalize, counts match profiles")
+
 # ---- date grid ----------------------------------------------------------------
 assert date_grid("2024-01-01", "2024-02-01", 21) == ["2024-01-01", "2024-01-22"]
 assert date_grid("2024-01-01", "2024-01-21", 21) == ["2024-01-01"]
