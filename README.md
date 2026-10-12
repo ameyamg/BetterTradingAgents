@@ -199,8 +199,9 @@ The walk-forward harness answers "is the pipeline better than buy-and-hold?":
 uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30 --step 21
 ```
 
-Mock mode is the free default; `--holdout` splits tune and untouched test dates, and
-`--paired` changes one dimension at a time. The full guide lives in the wiki's
+Mock mode is the free default; `--sec-edgar-fundamentals` replays US statements as
+filed (a real point-in-time source), `--holdout` splits tune and untouched test dates,
+and `--paired` changes one dimension at a time. The full guide lives in the wiki's
 [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting) page.
 
 ## Live track record
