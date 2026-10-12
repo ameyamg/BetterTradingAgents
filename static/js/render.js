@@ -180,8 +180,8 @@ export function renderSummaryTable() {
   table.id = "summary-table";
   table.className = "stack";
   table.innerHTML = `
-    <caption class="sr-only">Decision summary for analyzed tickers</caption>
-    <thead><tr><th scope="col">Ticker</th><th scope="col">Call</th><th scope="col" class="num">Price</th><th scope="col">Horizon</th><th scope="col">Data age</th><th scope="col">Coverage</th><th scope="col">Risk</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+    <caption>Decision summary · ${OUTLOOK_LABELS[state.outlook] || state.outlook} outlook · ${depthProfile().label} depth</caption>
+    <thead><tr><th scope="col">Ticker</th><th scope="col">Call</th><th scope="col" class="num">Price</th><th scope="col">Data age</th><th scope="col">Coverage</th><th scope="col">Risk</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
     <tbody>${analyses.map((analysis) => {
       const flags = analysis.risk_flags || [];
       const entry = state.tickers.get(analysis.ticker);
@@ -200,7 +200,6 @@ export function renderSummaryTable() {
         <td data-label="Ticker"><strong>${escapeHtml(analysis.ticker)}</strong></td>
         <td data-label="Call">${decisionBadge(analysis.decision)}${gated ? `<span class="gate-chip">risk-adjusted</span>` : ""}<small>${convictionLabel(analysis.confidence)} · ${Math.round((analysis.confidence || 0) * 100)}%</small></td>
         <td data-label="Price" class="num">${analysis.price != null ? `$${Number(analysis.price).toFixed(2)}` : "Not available"}</td>
-        <td data-label="Horizon">${OUTLOOK_LABELS[state.outlook] || state.outlook}<small>${depthProfile().label} depth</small></td>
         <td data-label="Data age">${age.stale ? '<span class="flag-warn">' : ""}${ageLabel(age.hours)}${age.stale ? " · stale</span>" : ""}<small>${analysis.as_of ? escapeHtml(formatDateTime(analysis.as_of)) : "no timestamp"}${entry?.cached ? " · cached" : ""}</small></td>
         <td data-label="Coverage" class="cov">${analysis.error ? "n/a" : `${cov.available}/${cov.expected} analysts`}${!analysis.error && cov.split.available ? `<small>${splitLabel(cov.split)}</small>` : ""}</td>
         <td data-label="Risk">${riskCell}</td>
@@ -218,10 +217,13 @@ export function renderProgressCard(ticker) {
   card.id = `live-${ticker}`;
   card.setAttribute("aria-labelledby", `live-title-${ticker}`);
   const agents = activeAgents();
-  card.innerHTML = `
-    <div class="ticker-head"><span class="tk" id="live-title-${ticker}">${escapeHtml(ticker)} <span class="px" id="px-${ticker}">fetching data…</span></span><span class="src" id="src-${ticker}"></span><span class="muted prog-count" id="progc-${ticker}">0/${agents.length}</span></div>
-    <div class="run-progress" id="progress-${ticker}" role="progressbar" aria-label="${escapeAttr(ticker)} analysis progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">${agents.map((agent) => `<span class="seg" data-agent="${escapeAttr(agent.key)}"></span>`).join("")}</div>
-    ${agents.map((agent) => `
+  // Stage headers group the roster into Research / Debate / Decision, so the
+  // progress card reads as a narrative instead of a flat list of ten rows.
+  const agentCells = agents.map((agent, index) => {
+    const stageHeader = !index || agents[index - 1].stage !== agent.stage
+      ? `<div class="stage-row">${escapeHtml(agent.stage)}</div>`
+      : "";
+    return `${stageHeader}
       <div class="agent-cell" id="cell-${ticker}-${agent.key}">
         <div class="agent-row" data-agent="${agent.key}">
           <span class="agent-left"><span class="agent-icon">${ICONS[agent.key]}</span><span class="agent-name">${agent.label}</span></span>
@@ -229,7 +231,12 @@ export function renderProgressCard(ticker) {
           <span class="status" id="status-${ticker}-${agent.key}"><span class="icon" aria-hidden="true"></span>Waiting</span>
         </div>
         <div class="stream-pane" id="stream-${ticker}-${agent.key}" hidden><pre id="stream-pre-${ticker}-${agent.key}"></pre></div>
-      </div>`).join("")}`;
+      </div>`;
+  }).join("");
+  card.innerHTML = `
+    <div class="ticker-head"><span class="tk" id="live-title-${ticker}">${escapeHtml(ticker)} <span class="px" id="px-${ticker}">fetching data…</span></span><span class="src" id="src-${ticker}"></span><span class="muted prog-count" id="progc-${ticker}">0/${agents.length}</span></div>
+    <div class="run-progress" id="progress-${ticker}" role="progressbar" aria-label="${escapeAttr(ticker)} analysis progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">${agents.map((agent) => `<span class="seg" data-agent="${escapeAttr(agent.key)}"></span>`).join("")}</div>
+    ${agentCells}`;
   $("live-grid").appendChild(card);
   // Once an agent streams tokens, its row becomes a toggle for the pane.
   card.querySelectorAll(".agent-row[data-agent]").forEach((row) => {
@@ -335,6 +342,15 @@ function renderTrackRecord(analysis, ticker) {
   return `<section class="result-block" aria-labelledby="memory-title-${ticker}"><div class="block-heading"><h3 id="memory-title-${ticker}">Past calls</h3></div><ul class="memory-list">${rows}</ul></section>`;
 }
 
+// Risk flags carry two weights: "action" flags changed the call or its size
+// (downgrade, halving, caps, brake); "note" flags only report context (an
+// analyst skipped, a provider unavailable). The UI marks them differently.
+function flagKind(flag) {
+  if (/skip|unavailable|not available/i.test(flag)) return "note";
+  if (/downgrad|halv|cap|brake|block/i.test(flag)) return "action";
+  return "note";
+}
+
 export function renderResultCard(analysis) {
   $("results-section").classList.remove("hidden");
   const ticker = analysis.ticker;
@@ -391,7 +407,7 @@ export function renderResultCard(analysis) {
     key,
   )).join("");
   const conditions = analysis.would_upgrade_if || analysis.would_downgrade_if
-    ? `<div class="manager-conditions"><span class="eyebrow eyebrow-flat">Conditions for a different call - not alerts or price targets</span>${analysis.would_upgrade_if ? `<p><strong>Stronger call if:</strong> ${escapeHtml(analysis.would_upgrade_if)}</p>` : ""}${analysis.would_downgrade_if ? `<p><strong>Weaker call if:</strong> ${escapeHtml(analysis.would_downgrade_if)}</p>` : ""}</div>`
+    ? `<div class="manager-conditions"><span class="eyebrow eyebrow-flat">What would change this call - not alerts or price targets</span><div class="condition-cols">${analysis.would_upgrade_if ? `<p><strong>Stronger call if:</strong> ${escapeHtml(analysis.would_upgrade_if)}</p>` : ""}${analysis.would_downgrade_if ? `<p><strong>Weaker call if:</strong> ${escapeHtml(analysis.would_downgrade_if)}</p>` : ""}</div></div>`
     : "";
   // Repeat analyses lead with a deterministic `What changed` summary (P1.5).
   const changed = analysis.what_changed?.length
@@ -415,14 +431,16 @@ export function renderResultCard(analysis) {
   const printBtn = '<button class="secondary-btn print-btn" type="button">Print brief</button>';
 
   card.innerHTML = `
-    <button class="result-summary" type="button" aria-expanded="false" aria-controls="${detailId}"><span class="result-identity"><span class="tk">${escapeHtml(ticker)}</span><span class="company">${escapeHtml(analysis.company_name || "Company name unavailable")}</span></span>${decisionBadge(analysis.decision)}${gated ? '<span class="gate-chip">risk-adjusted</span>' : ""}<span class="summary-action">Evidence &amp; sources <span class="caret" aria-hidden="true">▶</span></span></button>
+    <button class="result-summary" type="button" aria-expanded="false" aria-controls="${detailId}"><span class="result-identity"><span class="tk">${escapeHtml(ticker)}</span><span class="company">${escapeHtml(analysis.company_name || "Company name unavailable")}</span></span><span class="summary-verdict">${decisionBadge(analysis.decision)}<span class="summary-strength" title="${escapeAttr(convictionLabel(analysis.confidence))}">${confidencePct}%</span>${gated ? '<span class="gate-chip">risk-adjusted</span>' : !analysis.error && flags.length ? `<span class="summary-flags" title="${escapeAttr(flags.join(" · "))}">⚠ ${flags.length} flag${flags.length > 1 ? "s" : ""}</span>` : ""}</span><span class="summary-action">Evidence &amp; sources <span class="caret" aria-hidden="true">▶</span></span></button>
     <div class="decision-brief">
       ${changed}
       ${gated ? `<div class="gate-banner"><span class="gate-chip">risk-adjusted</span><span class="gate-line">${escapeHtml(gateLine(analysis))}</span>${downgradeFlag(analysis) ? `<small>⚠ ${escapeHtml(downgradeFlag(analysis))}</small>` : ""}</div>` : ""}
       <div class="decision-facts"><div><span>Current price</span><strong>${analysis.price != null ? `$${Number(analysis.price).toFixed(2)}` : "Unavailable"}</strong></div><div><span>5-day forecast</span><strong>${analysis.forecast_price_5d != null ? `$${Number(analysis.forecast_price_5d).toFixed(2)} (${Number(analysis.forecast_change_5d_pct) >= 0 ? "+" : ""}${Number(analysis.forecast_change_5d_pct).toFixed(2)}%)` : "Unavailable"}</strong><small>${analysis.forecast_method === "timegpt-1" ? "TimeGPT" : analysis.forecast_trend_r2 != null ? `Local fit R² ${Number(analysis.forecast_trend_r2).toFixed(2)}` : "Local"}${forecastBandNote(analysis)}</small></div><div><span>Data age</span><strong>${age.stale ? '<span class="flag-warn">' : ""}${ageLabel(age.hours)}${cachedRun ? " · cached" : ""}${age.stale ? " · stale</span>" : ""}</strong><small>${escapeHtml(asOf)}</small></div><div><span>Evidence strength</span><strong>${convictionLabel(analysis.confidence)} · ${confidencePct}%</strong><small id="track-record-${ticker}" class="track-record"></small></div><div><span>Horizon</span><strong>${OUTLOOK_LABELS[state.outlook] || state.outlook}</strong><small>${profile.label} depth</small></div><div><span>Analyst coverage</span><strong>${analysis.error ? "n/a" : `${cov.available}/${cov.expected} analysts`}</strong>${!analysis.error && cov.split.available ? `<small>${splitLabel(cov.split)}</small>` : ""}${fallbacks.length ? `<small class="flag-warn">${fallbacks.map(escapeHtml).join(" · ")}</small>` : ""}</div><div><span>Suggested size</span><strong>${analysis.suggested_size_usd ? fmtUsd(analysis.suggested_size_usd) : "No position"}</strong></div></div>
-      <div class="manager-conclusion"><span class="eyebrow">Manager conclusion</span><p class="thesis">${escapeHtml(analysis.summary || analysis.error || "No manager summary was returned.")}</p></div>
-      ${conditions}
-      ${analysis.error ? `<div class="risk-flags"><strong>Analysis unavailable</strong><span>⚠ ${escapeHtml(analysis.error)}</span></div>` : flags.length ? `<div class="risk-flags"><strong>Risk flags</strong>${flags.map((flag) => `<span>⚠ ${escapeHtml(flag)}</span>`).join("")}</div>` : '<div class="risk-clear"><span aria-hidden="true">✓</span> No risk rules were triggered.</div>'}
+      <div class="call-read">
+        <div class="manager-conclusion"><span class="eyebrow">Why this call</span><p class="thesis">${escapeHtml(analysis.summary || analysis.error || "No manager summary was returned.")}</p></div>
+        ${conditions}
+      </div>
+      ${analysis.error ? `<div class="risk-flags"><strong>Analysis unavailable</strong><span class="flag-action">⚠ ${escapeHtml(analysis.error)}</span></div>` : flags.length ? `<div class="risk-flags"><strong>Risk flags</strong>${flags.map((flag) => `<span class="flag-${flagKind(flag)}">${flagKind(flag) === "action" ? "⚠" : "ℹ"} ${escapeHtml(flag)}</span>`).join("")}</div>` : '<div class="risk-clear"><span aria-hidden="true">✓</span> No risk rules were triggered.</div>'}
       ${concentrationBlock(analysis)}
       ${runMeta}
     </div>

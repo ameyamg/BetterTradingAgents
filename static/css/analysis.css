@@ -419,7 +419,8 @@
   color: var(--warn-soft); background: rgba(245, 198, 107, 0.12); border: 1px solid rgba(245, 198, 107, 0.35);
   vertical-align: middle; white-space: nowrap;
 }
-.result-summary .gate-chip { margin-left: 10px; }
+.result-summary .gate-chip { margin-left: 0; }
+.summary-verdict { display: inline-flex; align-items: center; gap: 8px; justify-self: end; min-width: 0; }
 .gate-banner {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px;
   margin-bottom: 16px; padding: 10px 12px; border-left: 3px solid rgba(245, 198, 107, 0.65);
@@ -741,3 +742,31 @@
 @media (max-width: 620px) {
   .paper-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---------- decision-first reading (result card v2) ---------- */
+/* The summary row answers the one-second question: what call, how strong,
+   risk-adjusted or flagged. The brief opens with why and what would change
+   the call before the supporting detail. */
+.summary-strength {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  font-variant-numeric: tabular-nums; flex: none;
+}
+.summary-flags {
+  flex: none; padding: 2px 8px; border-radius: var(--r-pill);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--warn-soft); background: rgba(245, 198, 107, 0.1);
+  border: 1px solid rgba(245, 198, 107, 0.35);
+}
+.call-read { display: grid; gap: 16px; margin-top: 2px; }
+.condition-cols { display: grid; grid-template-columns: 1fr; gap: 6px 18px; }
+@media (min-width: 1024px) {
+  .call-read { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
+  .condition-cols { grid-template-columns: 1fr 1fr; }
+}
+.risk-flags .flag-action { color: var(--warn-soft); }
+.risk-flags .flag-note { color: var(--muted); }
+.stage-row {
+  margin: 14px 0 6px; color: var(--muted); font-size: 10px; font-weight: 750;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.stage-row:first-child { margin-top: 4px; }
