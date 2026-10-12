@@ -258,8 +258,9 @@ decision-first results experience, and real charts).
 
 Next up: guided first-run onboarding (P2.7), deployment and broker-sync hardening
 (P2.2, P2.3), a run-speed pass on the pre-agent data phase (P2.14), regional
-benchmarks for non-US tickers (P1.16), and settling every due decision on a schedule
-(P1.17).
+benchmarks for non-US tickers (P1.16), settling every due decision on a schedule
+(P1.17), and a local Chronos-2 forecast provider so the 5-day forecast stops
+depending on one metered API (P2.19).
 
 ## Disclaimer
 
