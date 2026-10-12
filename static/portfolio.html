@@ -66,9 +66,9 @@
       </div>
       <p class="hint" id="automation-config"></p>
       <p class="page-status" id="automation-warn" role="status" aria-live="polite"></p>
-      <div class="table-wrap">
+      <div class="table-wrap table-scroll">
         <table class="stack" id="automation-table">
-          <caption>Recent automated sessions</caption>
+          <caption class="sr-only">Recent automated sessions</caption>
           <thead>
             <tr>
               <th>Started</th>
@@ -101,60 +101,72 @@
         <h2>Open paper positions</h2>
         <button id="download-csv" class="secondary-btn hidden" type="button" aria-label="Download the paper positions as CSV">Download CSV</button>
       </div>
-      <table class="stack" id="paper-positions-table">
-        <caption class="sr-only">Open paper positions in the Alpaca paper account</caption>
-        <thead>
-          <tr>
-            <th>Ticker</th>
-            <th class="num">Qty</th>
-            <th class="num">Avg entry</th>
-            <th class="num">Current</th>
-            <th class="num">Value</th>
-            <th class="num">Unrealized P&L</th>
-            <th class="num">P&L %</th>
-          </tr>
-        </thead>
-        <tbody id="paper-positions-body"></tbody>
-      </table>
+      <div class="table-wrap table-scroll">
+        <table class="stack" id="paper-positions-table">
+          <caption class="sr-only">Open paper positions in the Alpaca paper account</caption>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th class="num">Qty</th>
+              <th class="num">Avg entry</th>
+              <th class="num">Current</th>
+              <th class="num">Value</th>
+              <th class="num">Unrealized P&L</th>
+              <th class="num">P&L %</th>
+            </tr>
+          </thead>
+          <tbody id="paper-positions-body"></tbody>
+        </table>
+      </div>
       <p class="empty-note hidden" id="paper-empty-note">No open paper positions yet. BUY decisions on the analysis page offer a paper order.</p>
     </div>
 
-    <div class="card table-wrap portfolio-table hidden" id="orders-card">
-      <table class="stack" id="orders-table">
-        <caption>Orders placed here (Alpaca paper)</caption>
-        <thead>
-          <tr>
-            <th>Placed</th>
-            <th>Ticker</th>
-            <th>Side</th>
-            <th class="num">Notional</th>
-            <th>Status</th>
-            <th class="num">Filled avg price</th>
-            <th>Decision</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="orders-body"></tbody>
-      </table>
+    <div class="card table-wrap portfolio-table hidden" id="orders-card" aria-labelledby="orders-heading">
+      <div class="card-heading">
+        <h2 id="orders-heading">Orders placed here (Alpaca paper)</h2>
+      </div>
+      <div class="table-wrap table-scroll">
+        <table class="stack" id="orders-table">
+          <caption class="sr-only">Orders placed here (Alpaca paper)</caption>
+          <thead>
+            <tr>
+              <th>Placed</th>
+              <th>Ticker</th>
+              <th>Side</th>
+              <th class="num">Notional</th>
+              <th>Status</th>
+              <th class="num">Filled avg price</th>
+              <th>Decision</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="orders-body"></tbody>
+        </table>
+      </div>
       <p class="empty-note hidden" id="orders-empty">No orders yet. Paper orders are placed from a finished decision's result card.</p>
     </div>
 
-    <div class="card table-wrap portfolio-table hidden" id="perf-card">
-      <table class="stack" id="perf-table">
-        <caption>Performance since fill (paper orders vs SPY)</caption>
-        <thead>
-          <tr>
-            <th>Ticker</th>
-            <th>Placed</th>
-            <th class="num">Fill price</th>
-            <th class="num">Now</th>
-            <th class="num">Return</th>
-            <th class="num">SPY</th>
-            <th class="num">Alpha</th>
-          </tr>
-        </thead>
-        <tbody id="perf-body"></tbody>
-      </table>
+    <div class="card table-wrap portfolio-table hidden" id="perf-card" aria-labelledby="perf-heading">
+      <div class="card-heading">
+        <h2 id="perf-heading">Performance since fill (paper orders vs SPY)</h2>
+      </div>
+      <div class="table-wrap table-scroll">
+        <table class="stack" id="perf-table">
+          <caption class="sr-only">Performance since fill (paper orders vs SPY)</caption>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Placed</th>
+              <th class="num">Fill price</th>
+              <th class="num">Now</th>
+              <th class="num">Return</th>
+              <th class="num">SPY</th>
+              <th class="num">Alpha</th>
+            </tr>
+          </thead>
+          <tbody id="perf-body"></tbody>
+        </table>
+      </div>
       <p class="empty-note hidden" id="perf-empty">No filled order has a measurable window yet.</p>
     </div>
     </main>

@@ -66,3 +66,19 @@
 .equity-chart .chart-hover-dot { fill: var(--ok); }
 .equity-table-holder summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .equity-table-holder table { margin-top: 8px; }
+
+/* Portfolio tables (positions, orders, performance, sessions): five rows
+   visible, the rest scroll. The header stays pinned while rows move under it.
+   border-collapse must be separate: with collapse, Chromium silently drops
+   position: sticky on th/thead and the column headers scroll away. */
+.table-scroll { max-height: 215px; overflow-y: auto; }
+.table-scroll table { border-collapse: separate; border-spacing: 0; }
+.table-scroll thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--panel); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+/* Narrow screens stack each row into a tall card: give the window room for
+   several of them instead of a fraction of one. */
+@media (max-width: 768px) {
+  .table-scroll { max-height: 800px; }
+}

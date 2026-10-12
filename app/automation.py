@@ -184,7 +184,9 @@ def _finish_session(
         )
 
 
-def _list_sessions(limit: int = 10) -> list[AutomationSession]:
+def _list_sessions(limit: int = 20) -> list[AutomationSession]:
+    """Newest sessions for the portfolio card: the top three rows are visible,
+    the rest scroll, so the card sends up to 20 rows."""
     with _connect() as connection:
         rows = connection.execute(
             "SELECT * FROM automation_sessions ORDER BY id DESC LIMIT ?", (limit,)
