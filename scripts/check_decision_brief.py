@@ -180,6 +180,25 @@ async def e2e():
     print("e2e (no gate change) OK:", result.decision,
           "| coverage", f"{len(dq.available_analysts)}/{len(dq.expected_analysts)}")
 
+    # 1b) Pro depth skips fundamental and sentiment by profile. Skipped is a
+    # roster choice, not a failed input, so the gate must leave confidence
+    # alone (regression: a fixed gate tuple counted skipped analysts as failed
+    # and capped every Pro run at 50%).
+    pro = await asyncio.wait_for(
+        analyze_ticker("NVDA", emit, market_data=snapshot("NVDA"), depth="pro",
+                       live_context=False),
+        timeout=90,
+    )
+    assert pro.error is None, pro.error
+    assert pro.data_quality.expected_analysts == ["market", "technical", "news", "forecast"]
+    assert pro.data_quality.skipped_analysts == ["fundamental", "sentiment"]
+    assert pro.data_quality.failed_analysts == []
+    assert not any("inputs failed" in flag for flag in pro.risk_flags), pro.risk_flags
+    assert pro.confidence == pro.manager_confidence, (
+        pro.confidence, pro.manager_confidence
+    )
+    print("e2e (pro depth) OK: skipped analysts are not failed inputs, no false 50% cap")
+
     # 2) Risk gate downgrades the manager's BUY -> both calls must survive.
     forced_flag = "downgraded BUY to HOLD: exposure cap test"
     real_evaluate, real_mock = risk.evaluate, manager_agent.mock

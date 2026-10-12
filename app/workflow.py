@@ -1071,11 +1071,24 @@ async def analyze_ticker(
     # Risk gate: deterministic sizing, forecast check, and exposure caps.
     size_usd, risk_flags = None, []
     if mgr_data:
+        # Only the researchers this depth actually requested are gate inputs;
+        # one skipped by the profile (fundamental and sentiment at Pro) is a
+        # roster choice, not a failed input - the rule quality.build applies.
+        gate_inputs = tuple(
+            result
+            for key, result in (
+                ("technical", tech),
+                ("fundamental", fund),
+                ("news", news_r),
+                ("sentiment", sentiment_r),
+            )
+            if key in research
+        )
         decision, confidence, size_usd, risk_flags = risk.evaluate(
             decision,
             confidence,
             ticker,
-            analysts=(tech, fund, news_r, sentiment_r),
+            analysts=gate_inputs,
             vol_ann_pct=vol_ann_pct,
             portfolio=portfolio_summ,
             forecast_change_pct=forecast_change_pct,

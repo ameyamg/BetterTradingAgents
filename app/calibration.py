@@ -25,7 +25,7 @@ from app.config import settings
 # Bump when decision semantics change materially (manager prompt, risk gate,
 # debate structure) so outcomes from different systems are never pooled
 # silently. Old rows keep the version they were recorded with.
-DECISION_POLICY_VERSION = "2026-10-d"
+DECISION_POLICY_VERSION = "2026-10-e"
 
 def success_event() -> str:
     """Frozen success event for ManagerResult.probability_beat_spy, built from
