@@ -15,7 +15,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
 from app.config import settings
-from app.memory import compute_outcome, verdict
+# The edges come from app.memory so the scorecard can never quote thresholds
+# the grading rule does not use.
+from app.memory import ALPHA_EDGE_PCT, MOVE_EDGE_PCT, compute_outcome, verdict
 
 POSITION_USD = settings.default_position_size
 CRASH_PCT = -10.0  # a matured window this far down is a "collapse"
