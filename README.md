@@ -210,20 +210,21 @@ Every completed call is graded 21 days later against real closes: its own return
 vs SPY. This scorecard is generated, not hand-written:
 `uv run python scripts/benchmark.py --markdown` rebuilds it from the local run history.
 
-As of 2026-09-30: 20 live sessions, 26 unique calls, 10 fully graded (10 still inside their
+As of 2026-10-12: 62 live sessions, 59 unique calls, 12 fully graded (37 still inside their
 21-day window).
 
 | What the market did next (21-day window) | The agent's record |
 |---|---|
 | 3 candidates fell more than 10% (MGTX -21%, BHVN -17%, TFX -12%) | 3 of 3 sidestepped |
-| 8 HOLD calls | 4 avoided a 2%+ drop, 1 missed a 2%+ rally, 3 moved under 2% |
+| 10 HOLD calls | 4 avoided a 2%+ drop, 2 missed a 2%+ rally, 4 moved under 2% |
 | 2 BUY calls | 0 of 2 beat SPY by more than 1% |
-| Same $10,000 per signal, cash results | agent -$170 vs always-buy -$2,827 vs SPY +$547 |
+| Same $10,000 per signal, cash results | agent -$206 vs always-buy -$5,262 vs SPY +$339 |
 
-Cost per analysis, measured on the same history: **$0.09 per ticker**; a typical 3-5 ticker
-run lands near **$0.31** at provider list prices. Early data, stated plainly: the pattern so
-far is capital preservation first; the BUY record is the weak spot, which is exactly what
-the risk gate's confidence bar guards.
+Cost per analysis, measured on the same history: **$0.12 per ticker**; a typical 3-5 ticker
+run lands near **$0.40** at provider list prices. Early data, stated plainly: one month of
+live use and 12 graded calls is a small sample. The pattern so far is capital preservation
+first; the BUY record is the weak spot, which is exactly what the risk gate's confidence
+bar guards.
 
 ## Development
 
@@ -249,11 +250,16 @@ concentration risk, an accuracy scorecard of past calls vs realized performance
 (`uv run python scripts/accuracy.py`), Alpaca paper trading with autopilot
 sessions, in-app settings with OS-keychain secret storage, browser notifications, the
 debate judge (one neutral cross-examination of the bull/bear cases replacing the old
-self-scored rebuttal round), and the market-regime analyst with rebalanced depth tiers:
+self-scored rebuttal round), the market-regime analyst with rebalanced depth tiers:
 Fast (3 agents, no debate), Pro (7), Max (10) - old "medium" and "expert" values keep
-working everywhere, and backtests exclude the market analyst to stay point-in-time honest.
+working everywhere - point-in-time SEC EDGAR fundamentals for honest fundamental
+backtests, incognito mode, and a three-part UI pass (a shared UI layer, a
+decision-first results experience, and real charts).
 
-Next up: guided first-run onboarding in the web UI, an in-app accuracy report comparing past calls with realized 21-day stock performance (the data to settle whether the judge improves graded outcomes), and search and export across past runs.
+Next up: guided first-run onboarding (P2.7), deployment and broker-sync hardening
+(P2.2, P2.3), a run-speed pass on the pre-agent data phase (P2.14), regional
+benchmarks for non-US tickers (P1.16), and settling every due decision on a schedule
+(P1.17).
 
 ## Disclaimer
 
