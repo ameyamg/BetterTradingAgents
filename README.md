@@ -50,7 +50,7 @@ reference list and how each finding shapes the roadmap.
 | 🕶️ | **Incognito mode** | Test the full pipeline market-only: no paper-account access, no trading, and nothing saved - download the report or chat, close the tab, and the run is gone. |
 | 🧪 | **Walk-forward backtests** | Replay the pipeline at past dates with point-in-time data only, graded against SPY after costs. |
 | 🕘 | **Durable history** | Completed and interrupted analyses are saved in SQLite and reopenable from the Runs page. |
-| 📊 | **Real market data** | Finnhub, Olostep, and yfinance for fundamentals, news, and prices; TimeGPT, hosted Chronos-2, or a local Chronos-2 optionally forecast, with the trend model as the final fallback. |
+| 📊 | **Real market data** | Finnhub, Olostep, and yfinance for fundamentals, news, and prices; Nixtla TimeGPT or TSFM.ai Chronos-2 optionally forecast, with the local trend model as the final fallback. |
 | 🧠 | **Model flexibility** | Any OpenAI-compatible LLM, split by role: cheap and fast for researchers, stronger for the final call. |
 | 🛡️ | **Autopilot with guard rails** | Scheduled paper-trading sessions through the same risk gate and broker caps as manual clicks. |
 | 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served directly by FastAPI. |

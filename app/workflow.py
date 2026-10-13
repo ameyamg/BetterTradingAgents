@@ -43,7 +43,6 @@ from app.tools.market_data import (
     MarketData,
     get_market_context,
     get_stock_data,
-    get_local_chronos_forecast,
     get_timegpt_forecast,
     get_tsfm_forecast,
 )
@@ -755,26 +754,16 @@ async def analyze_ticker(
     hosted_forecast: dict | None = None
     if "forecast" in research:
         local_forecast = historical_forecast(market.closes, run_horizon)
-        # Chain: TimeGPT while its quota allows, then hosted TSFM.ai Chronos-2,
-        # then the local trend model. forecast_provider pins the chain: chronos
-        # runs the LOCAL Chronos-2 model instead of the hosted calls (opt-in
-        # only, dormant in auto - it never loads unless explicitly asked), and
-        # local skips straight to the trend model. Any failure falls through,
-        # and the payload key keeps its name for saved-run parity.
-        provider = settings.forecast_provider
-        if provider in ("auto", "nixtla"):
-            hosted_forecast = await get_timegpt_forecast(market.closes, run_horizon)
-        if hosted_forecast is None and provider == "auto":
+        # Hosted chain: TimeGPT while its quota allows, then TSFM.ai
+        # (Chronos-2), then the local trend model. Any failure falls through;
+        # the payload key keeps its historical name for saved-run parity.
+        hosted_forecast = await get_timegpt_forecast(market.closes, run_horizon)
+        if hosted_forecast is None:
             hosted_forecast = await get_tsfm_forecast(market.closes, run_horizon)
-        if hosted_forecast is None and provider == "chronos":
-            hosted_forecast = await get_local_chronos_forecast(market.closes, run_horizon)
         if hosted_forecast:
             indicators.update(hosted_forecast)
-            method = hosted_forecast["forecast_method"]
             market.sources["forecast"] = (
-                "timegpt" if method == "timegpt-1"
-                else "chronos" if method == "chronos-2"
-                else "tsfm"
+                "timegpt" if hosted_forecast["forecast_method"] == "timegpt-1" else "tsfm"
             )
         else:
             market.sources["forecast"] = "local"

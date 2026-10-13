@@ -96,7 +96,6 @@ FIELD_GROUPS: list[dict[str, Any]] = [
             _field("olostep_api_key", "OLOSTEP_API_KEY", "Olostep API key", secret=True, hint="News search and Reddit/StockTwits sentiment"),
             _field("nixtla_api_key", "NIXTLA_API_KEY", "Nixtla TimeGPT API key", secret=True, hint="Forecast for the run's outlook horizon; falls back to the local trend model"),
             _field("tsfm_api_key", "TSFM_API_KEY", "TSFM.ai API key", secret=True, hint="Chronos-2 hosted forecast, used when TimeGPT is unavailable; falls back to the local trend model"),
-            _field("forecast_provider", "FORECAST_PROVIDER", "Forecast provider", hint="auto = TimeGPT, then TSFM Chronos-2, then the trend model; chronos = local Chronos-2 (opt-in, needs: uv sync --extra chronos)", choices=("auto", "nixtla", "chronos", "local")),
         ],
     },
     {

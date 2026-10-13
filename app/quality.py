@@ -47,13 +47,7 @@ def _fallback_notes(providers: dict[str, str], expected: list[str]) -> list[str]
     """Plain-text notes for inputs that degraded below the configured provider."""
     notes: list[str] = []
     if "forecast" in expected:
-        # Only a degradation when the chain was actually trying hosted calls;
-        # a pinned chronos/local provider landing on the trend is the choice.
-        if (
-            providers.get("forecast") == "local"
-            and settings.forecast_provider in ("auto", "nixtla")
-            and (settings.nixtla_api_key or settings.tsfm_api_key)
-        ):
+        if providers.get("forecast") == "local" and (settings.nixtla_api_key or settings.tsfm_api_key):
             notes.append("forecast: local model (hosted forecast unavailable)")
         elif providers.get("forecast") == "none":
             notes.append("forecast: not available")

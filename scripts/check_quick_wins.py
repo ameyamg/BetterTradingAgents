@@ -84,34 +84,6 @@ assert _normalize_tsfm_forecast({"outputs": []}, 100, 5) is None
 assert _normalize_tsfm_forecast({"outputs": [{"mean": [[101]]}]}, 100, 5) is None  # too short
 print("TSFM normalizer OK: median quantile, middle fallback, mean fallback, gaps")
 
-# Local Chronos-2 (ROADMAP P2.19): same forecast shape, method chronos-2, the
-# model stubbed out so the check needs neither torch nor the weights.
-from app.tools import market_data as market_data_mod  # noqa: E402
-
-_original_median_path = market_data_mod._chronos_median_path
-
-
-def _stub_median_path(closes, horizon):
-    return [101, 102, 103, 104, 105][:horizon]
-
-
-def _failing_median_path(closes, horizon):
-    raise RuntimeError("model unavailable")
-
-
-try:
-    market_data_mod._chronos_median_path = _stub_median_path
-    local = asyncio.run(market_data_mod.get_local_chronos_forecast([100.0] * 60, 5))
-    assert local and local["forecast_price_5d"] == 105 and local["forecast_change_5d_pct"] == 5
-    assert local["forecast_method"] == "chronos-2" and local["forecast_horizon_days"] == 5
-    # A short history never reaches the model; a model failure degrades to None.
-    assert asyncio.run(market_data_mod.get_local_chronos_forecast([100.0] * 10, 5)) is None
-    market_data_mod._chronos_median_path = _failing_median_path
-    assert asyncio.run(market_data_mod.get_local_chronos_forecast([100.0] * 60, 5)) is None
-finally:
-    market_data_mod._chronos_median_path = _original_median_path
-print("local Chronos-2 OK: stubbed model, short history, failure fallback")
-
 short = compute_indicators([1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [10] * 5)
 assert "macd" not in short and "atr_14" not in short and "bollinger_percent_b" not in short
 print("indicators OK:", {k: ind[k] for k in ("macd", "macd_histogram",
@@ -246,7 +218,6 @@ print("forecast mock OK:", _fc["signal"], _fc["confidence"])
 # The analyst names the actual provider in its prompt, never a hardcoded one.
 assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "timegpt-1"}}) == "Nixtla TimeGPT"
 assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "tsfm-chronos-2"}}) == "TSFM.ai chronos-2"
-assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "chronos-2"}}) == "the local Chronos-2 model"
 assert forecast_agent._hosted_provider({}) == "the configured hosted provider"
 print("forecast provider label OK")
 
