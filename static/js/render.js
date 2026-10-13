@@ -172,6 +172,7 @@ function forecastHorizonLabel(analysis) {
 function forecastMethodLabel(analysis) {
   if (analysis.forecast_method === "timegpt-1") return "TimeGPT";
   if (String(analysis.forecast_method || "").startsWith("tsfm-")) return "Chronos-2 via TSFM";
+  if (analysis.forecast_method === "chronos-2") return "Chronos-2 (local)";
   if (analysis.forecast_trend_r2 != null) return `Local fit R² ${Number(analysis.forecast_trend_r2).toFixed(2)}`;
   return "Local";
 }
@@ -286,7 +287,7 @@ export function setHeader(ticker, price, name, sources) {
   if (priceElement && price != null) priceElement.textContent = `$${Number(price).toFixed(2)}`;
   else if (priceElement && name) priceElement.textContent = name;
   if (sourceElement && sources) {
-    const forecastSource = sources.forecast === "timegpt" ? "Nixtla TimeGPT" : sources.forecast === "local" ? "local forecast" : null;
+    const forecastSource = sources.forecast === "timegpt" ? "Nixtla TimeGPT" : sources.forecast === "chronos" ? "Chronos-2 (local)" : sources.forecast === "local" ? "local forecast" : null;
     const socialSource = sources.social === "olostep" ? "reddit/stocktwits" : null;
     const unique = [...new Set([sources.prices, sources.fundamentals, sources.news, socialSource, forecastSource].filter((source) => source && source !== "none"))];
     const label = unique.length ? `via ${unique.join(" + ")}` : "";

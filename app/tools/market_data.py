@@ -275,8 +275,17 @@ def _normalize_timegpt_forecast(
         or not isinstance(means[horizon - 1], (int, float))
     ):
         return None
-    price = float(means[horizon - 1])
-    if current_price <= 0 or price <= 0 or not isfinite(price):
+    return _point_forecast(means[horizon - 1], current_price, horizon, "timegpt-1")
+
+
+def _point_forecast(
+    price: float, current_price: float, horizon: int, method: str
+) -> dict | None:
+    """The one shape every forecast provider returns; None keeps the fallback."""
+    if not isinstance(price, (int, float)) or not isfinite(float(price)):
+        return None
+    price = float(price)
+    if current_price <= 0 or price <= 0:
         return None
     return {
         "forecast_price_5d": round(price, 2),
@@ -284,7 +293,7 @@ def _normalize_timegpt_forecast(
         "forecast_trend_r2": None,
         "forecast_window_days": None,
         "forecast_horizon_days": horizon,
-        "forecast_method": "timegpt-1",
+        "forecast_method": method,
     }
 
 
@@ -318,20 +327,54 @@ def _normalize_tsfm_forecast(
     point = path[horizon - 1]
     if isinstance(point, list):
         point = point[0] if point else None
-    if not isinstance(point, (int, float)) or not isfinite(float(point)):
-        return None
-    price = float(point)
-    if current_price <= 0 or price <= 0:
-        return None
     model_id = str(payload.get("model") or TSFM_MODEL)
-    return {
-        "forecast_price_5d": round(price, 2),
-        "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
-        "forecast_trend_r2": None,
-        "forecast_window_days": None,
-        "forecast_horizon_days": horizon,
-        "forecast_method": f"tsfm-{model_id.rsplit('/', 1)[-1]}",
-    }
+    return _point_forecast(point, current_price, horizon, f"tsfm-{model_id.rsplit('/', 1)[-1]}")
+
+
+_chronos_pipeline = None  # local Chronos-2, loaded on first use (chronos extra)
+
+
+def _chronos_median_path(closes: list[float], horizon: int) -> list[float]:
+    """Chronos-2's 0.5-quantile path on CPU; weights cache on first use."""
+    global _chronos_pipeline
+    if _chronos_pipeline is None:
+        from chronos import Chronos2Pipeline  # optional: uv sync --extra chronos
+
+        _chronos_pipeline = Chronos2Pipeline.from_pretrained(
+            "amazon/chronos-2", device_map="cpu"
+        )
+    import torch
+
+    # Chronos-2 wants (n_series, n_variates, history_length) even univariate,
+    # and answers with one (n_variates, horizon, n_quantiles) tensor per series.
+    quantiles, _ = _chronos_pipeline.predict_quantiles(
+        torch.tensor(closes[-512:], dtype=torch.float32).view(1, 1, -1),
+        prediction_length=horizon,
+        quantile_levels=[0.5],
+    )
+    return [float(v) for v in quantiles[0][0, :, 0].tolist()]
+
+
+async def get_local_chronos_forecast(
+    closes: list[float], horizon: int = 5
+) -> dict | None:
+    """Run Chronos-2 locally; None (trend fallback) when the extra is absent.
+
+    Dormant by design: only the explicit `forecast_provider=chronos` pin ever
+    calls this - the auto chain never loads the model (owner request, and it
+    keeps offline checks and cold starts free of a torch import).
+    """
+    if horizon < 1 or len(closes) < 30:
+        return None
+    try:
+        # CPU inference blocks for seconds; keep the event loop free for SSE.
+        path = await asyncio.to_thread(_chronos_median_path, closes[-512:], horizon)
+    except Exception as exc:  # noqa: BLE001 - missing extra or weights must degrade
+        logger.warning("Local Chronos-2 forecast failed: %s", exc)
+        return None
+    if not isinstance(path, list) or len(path) < horizon:
+        return None
+    return _point_forecast(path[horizon - 1], closes[-1], horizon, "chronos-2")
 
 
 # --------------------------------------------------------------------------

@@ -142,7 +142,9 @@ async def run_backtest(
         settings.llm_api_key = ""
         workflow._llms.clear()
         workflow._llm_roles_initialized.clear()
-    settings.nixtla_api_key = ""  # no paid forecasts inside a backtest
+    # Backtests grade the local trend model only: no paid hosted calls, and no
+    # slow local Chronos-2 inside the replay loop (ROADMAP P2.19 keeps this).
+    settings.forecast_provider = "local"
 
     profile = depth_profile(depth)
     exclusions = tuple(exclude_analysts)

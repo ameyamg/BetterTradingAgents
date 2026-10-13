@@ -27,13 +27,15 @@ def build_agent(llm):
 
 
 def _hosted_provider(payload: dict) -> str:
-    """Name the hosted forecast by its actual method, for prompt text."""
+    """Name the primary forecast by its actual method, for prompt text."""
     hosted = payload.get("hosted_forecast") or {}
     method = str(hosted.get("forecast_method") or "")
     if method == "timegpt-1":
         return "Nixtla TimeGPT"
     if method.startswith("tsfm-"):
         return f"TSFM.ai {method[len('tsfm-'):]}"
+    if method == "chronos-2":
+        return "the local Chronos-2 model"
     return "the configured hosted provider"
 
 

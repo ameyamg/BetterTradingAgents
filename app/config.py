@@ -54,6 +54,11 @@ class Settings:
     # TSFM.ai hosts Chronos-2 / Granite TTM forecasting; the second hosted
     # forecast in the chain (TimeGPT, then TSFM, then the local trend model).
     tsfm_api_key: str = _env("TSFM_API_KEY")
+    # Forecast chain selector (ROADMAP P2.19). auto = TimeGPT, then hosted
+    # TSFM Chronos-2, then the trend model. chronos pins the chain to a LOCAL
+    # Chronos-2 (opt-in only: it never loads in auto), nixtla to TimeGPT only,
+    # local to the trend model. Every link still falls back to the trend.
+    forecast_provider: str = _env("FORECAST_PROVIDER", "auto")
     # SEC EDGAR (ROADMAP P1.15) needs no key, but asks callers to identify
     # themselves. Set your own contact so SEC can reach you, not the project.
     sec_edgar_user_agent: str = _env("SEC_EDGAR_USER_AGENT")
