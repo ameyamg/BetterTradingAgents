@@ -134,6 +134,12 @@ class Settings:
     alpaca_max_decision_age_hours: float = float(
         _env("ALPACA_MAX_DECISION_AGE_HOURS", "72")
     )
+    # Broker reconciliation (wiki Roadmap P2.3): a startup sweep plus an
+    # interval sweep refresh non-terminal local orders by client order id and
+    # diff Alpaca's open orders against the local set (the out-of-sync banner).
+    broker_sync_interval_minutes: int = max(
+        5, int(_env("BROKER_SYNC_INTERVAL_MINUTES", "15"))
+    )
 
     # Automated paper-trading sessions (autopilot). A background loop scans
     # the market for candidates (the discovery screen), adds held tickers so

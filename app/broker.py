@@ -12,9 +12,11 @@ curve are the source of truth and are fetched fresh on every read.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import sqlite3
+import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -22,8 +24,12 @@ from enum import Enum
 import requests
 from alpaca.common.exceptions import APIError
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderSide, OrderType, TimeInForce
-from alpaca.trading.requests import GetPortfolioHistoryRequest, MarketOrderRequest
+from alpaca.trading.enums import OrderSide, OrderType, QueryOrderStatus, TimeInForce
+from alpaca.trading.requests import (
+    GetOrdersRequest,
+    GetPortfolioHistoryRequest,
+    MarketOrderRequest,
+)
 
 from app.config import settings
 from app.models import BrokerAccount, BrokerOrder, BrokerPosition, BrokerStatus
@@ -36,6 +42,16 @@ TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
 # Terminal for our purposes; anything else may still move or be canceled.
 TERMINAL_ORDER_STATUSES = ("filled", "canceled", "expired", "rejected")
+
+# Transient broker failures worth a retry on read paths (P2.3): rate limits
+# and server errors. Auth/validation errors fail immediately.
+TRANSIENT_STATUS_CODES = (429, 500, 502, 503, 504)
+BROKER_READ_RETRIES = 2
+BROKER_RETRY_BACKOFF_S = 0.5
+
+# Local non-terminal rows older than this are no longer swept: a row that old
+# would have settled through refresh_order's 404 path on an earlier sweep.
+RECONCILE_WINDOW_DAYS = 7
 
 EQUITY_PERIODS = ("1W", "1M", "3M", "1A")
 
@@ -87,11 +103,33 @@ def _map_broker_error(exc: APIError) -> str:
 
 
 async def _call(fn):
-    """Run one sync SDK call off the event loop, mapping SDK errors."""
-    try:
-        return await asyncio.to_thread(fn)
-    except APIError as exc:
-        raise BrokerRuleError(_map_broker_error(exc), status_code=503) from exc
+    """Run one sync SDK call off the event loop, retrying transient failures.
+
+    Rate limits, broker 5xx, and network drops are retried with a short
+    backoff (P2.3); auth/validation errors map through immediately. Only
+    reads go through here - the order POST path retries nothing blindly.
+    """
+    for attempt in range(BROKER_READ_RETRIES + 1):
+        try:
+            return await asyncio.to_thread(fn)
+        except requests.exceptions.RequestException as exc:
+            if attempt >= BROKER_READ_RETRIES:
+                raise BrokerRuleError(
+                    "Alpaca is unreachable right now; try again shortly",
+                    status_code=503,
+                ) from exc
+            logger.warning(
+                "[broker] read failed (%s); retry %d/%d",
+                exc, attempt + 1, BROKER_READ_RETRIES,
+            )
+        except APIError as exc:
+            if exc.status_code not in TRANSIENT_STATUS_CODES or attempt >= BROKER_READ_RETRIES:
+                raise BrokerRuleError(_map_broker_error(exc), status_code=503) from exc
+            logger.warning(
+                "[broker] read hit HTTP %s; retry %d/%d",
+                exc.status_code, attempt + 1, BROKER_READ_RETRIES,
+            )
+        await asyncio.sleep(BROKER_RETRY_BACKOFF_S * (attempt + 1))
 
 
 def _f(value) -> float | None:
@@ -197,6 +235,21 @@ async def init() -> None:
             connection.execute(
                 "CREATE INDEX IF NOT EXISTS idx_broker_orders_created "
                 "ON broker_orders(created_at)"
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS broker_sync (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    checked_at REAL,
+                    in_sync INTEGER NOT NULL DEFAULT 1,
+                    reconciled INTEGER NOT NULL DEFAULT 0,
+                    drift_json TEXT NOT NULL DEFAULT '[]',
+                    error TEXT
+                )
+                """
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO broker_sync (id, checked_at) VALUES (1, NULL)"
             )
 
     await asyncio.to_thread(_ddl)
@@ -581,10 +634,7 @@ async def equity(period: str = "1M") -> dict:
             GetPortfolioHistoryRequest(period=period, timeframe="1D")
         )
 
-    try:
-        history = await asyncio.to_thread(_fetch)
-    except APIError as exc:
-        raise BrokerRuleError(_map_broker_error(exc), status_code=502) from exc
+    history = await _call(_fetch)
 
     stamps = list(history.timestamp or [])
     values = list(history.equity or [])
@@ -698,3 +748,171 @@ async def cancel_order(client_order_id: str) -> BrokerOrder:
         raise BrokerRuleError(_map_broker_error(exc), status_code=502) from exc
 
     return await refresh_order(client_order_id)
+
+
+# ---- reconciliation (ROADMAP P2.3) -----------------------------------------
+
+_sync_task: asyncio.Task | None = None
+
+
+def _open_local_rows() -> list[sqlite3.Row]:
+    with _connect() as connection:
+        return connection.execute(
+            "SELECT * FROM broker_orders "
+            f"WHERE status NOT IN ({','.join('?' * len(TERMINAL_ORDER_STATUSES))}) "
+            f"AND created_at >= datetime('now', '-{RECONCILE_WINDOW_DAYS} days')",
+            TERMINAL_ORDER_STATUSES,
+        ).fetchall()
+
+
+def _read_sync_state() -> dict:
+    with _connect() as connection:
+        row = connection.execute("SELECT * FROM broker_sync WHERE id = 1").fetchone()
+    if row is None:
+        return {"checked_at": None, "in_sync": True, "reconciled": 0, "drift": [], "error": None}
+    try:
+        drift = json.loads(row["drift_json"] or "[]")
+    except ValueError:
+        drift = []
+    return {
+        "checked_at": row["checked_at"],
+        "in_sync": bool(row["in_sync"]),
+        "reconciled": int(row["reconciled"]),
+        "drift": drift,
+        "error": row["error"],
+    }
+
+
+def _write_sync_state(state: dict) -> None:
+    with _connect() as connection:
+        connection.execute(
+            "UPDATE broker_sync SET checked_at = ?, in_sync = ?, reconciled = ?, "
+            "drift_json = ?, error = ? WHERE id = 1",
+            (
+                state["checked_at"],
+                int(state["in_sync"]),
+                state["reconciled"],
+                json.dumps(state["drift"]),
+                state["error"],
+            ),
+        )
+
+
+async def sync_state(max_age_s: float = 0.0) -> dict:
+    """The stored sweep result; with `max_age_s`, refresh once when staler,
+    so a freshly opened page does not show a stale banner but polling tabs
+    still hit the broker at most once a minute."""
+    state = await asyncio.to_thread(_read_sync_state)
+    if max_age_s and settings.alpaca_configured and (
+        state["checked_at"] is None
+        or time.time() - state["checked_at"] > max_age_s
+    ):
+        try:
+            return await sync_once()
+        except (BrokerRuleError, BrokerNotConfigured) as exc:
+            return {**state, "error": str(exc)}
+    return state
+
+
+async def sync_once() -> dict:
+    """One reconciliation sweep (P2.3).
+
+    Every non-terminal local row is refreshed against Alpaca by client
+    order id: partial fills land in the row, and rows a crash left
+    pending_submit/unknown settle honestly (filled, or rejected when Alpaca
+    never saw them). Then Alpaca's own open orders are diffed against the
+    local set: anything open at the broker that this app has no row for is
+    drift, reported through the out-of-sync banner. Stores and returns the
+    state.
+    """
+    if not settings.alpaca_configured:
+        return await sync_state()
+    reconciled = 0
+    rows = await asyncio.to_thread(_open_local_rows)
+    for row in rows:
+        try:
+            await refresh_order(row["client_order_id"])
+            reconciled += 1
+        except (BrokerRuleError, BrokerNotConfigured):
+            pass  # broker unreachable: the next sweep retries the row
+        except Exception as exc:  # noqa: BLE001 - one bad row must not kill the sweep
+            logger.warning(
+                "[broker] could not reconcile %s: %s", row["client_order_id"], exc
+            )
+    try:
+        remote = await _call(
+            lambda: _client().get_orders(
+                GetOrdersRequest(status=QueryOrderStatus.OPEN, limit=500)
+            )
+        )
+    except (BrokerRuleError, BrokerNotConfigured) as exc:
+        state = {
+            "checked_at": time.time(),
+            "in_sync": False,
+            "reconciled": reconciled,
+            "drift": [],
+            "error": str(exc),
+        }
+        await asyncio.to_thread(_write_sync_state, state)
+        return state
+    local_ids = {row["client_order_id"] for row in rows}
+    drift = []
+    for order in remote:
+        client_order_id = str(getattr(order, "client_order_id", "") or "")
+        if not client_order_id or client_order_id in local_ids:
+            continue
+        drift.append(
+            {
+                "client_order_id": client_order_id,
+                "symbol": str(getattr(order, "symbol", "") or ""),
+                "side": _text(getattr(order, "side", "")),
+                "notional": _f(getattr(order, "notional", None)),
+                "submitted_at": str(getattr(order, "submitted_at", "") or ""),
+            }
+        )
+    state = {
+        "checked_at": time.time(),
+        "in_sync": not drift,
+        "reconciled": reconciled,
+        "drift": drift,
+        "error": None,
+    }
+    await asyncio.to_thread(_write_sync_state, state)
+    if drift:
+        logger.warning(
+            "[broker] out of sync: %d open order(s) at the broker with no local row",
+            len(drift),
+        )
+    return state
+
+
+async def reconcile_startup() -> None:
+    """Recovery sweep at startup, before any new submission can be accepted:
+    rows a crashed process left pending_submit/unknown settle here."""
+    if not settings.alpaca_configured:
+        return
+    try:
+        await sync_once()
+    except Exception as exc:  # noqa: BLE001 - startup must not die on the broker
+        logger.warning("[broker] startup reconciliation failed: %s", exc)
+
+
+async def _sync_loop() -> None:
+    # Sleep-first: a sweep fires only after a full interval, so short-lived
+    # processes (the offline checks) never reach the broker.
+    logger.info("[broker] sync loop started (every %d min)", settings.broker_sync_interval_minutes)
+    while True:
+        await asyncio.sleep(settings.broker_sync_interval_minutes * 60)
+        try:
+            await sync_once()
+        except Exception as exc:  # noqa: BLE001 - the loop outlives any bug
+            logger.warning("[broker] sync sweep failed: %s", exc)
+
+
+def start_sync_loop() -> None:
+    """Spawn the interval reconciliation sweep (idempotent; app startup)."""
+    global _sync_task
+    if not settings.alpaca_configured:
+        return
+    if _sync_task is None or _sync_task.done():
+        _sync_task = asyncio.create_task(_sync_loop(), name="broker-sync")
