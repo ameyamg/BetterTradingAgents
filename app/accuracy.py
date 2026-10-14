@@ -1,11 +1,9 @@
 """The Accuracy page's data: every past call vs what the market did (P1.9).
 
-Reads the decisions table the memory system already grades. Rows whose window
-closed but were never graded (the ticker was not analyzed again, so nothing
-triggered the lazy grading) are graded here once and stored back through the
-same helpers, so the page and the benchmark scorecard cannot drift apart.
-No new math: outcomes come from memory.compute_outcome, verdicts from
-memory.verdict.
+Grading runs through memory.settle_pending() (P1.17), so every decision whose
+horizon window closed is matured here whether or not its ticker gets analyzed
+again; the page only reads and aggregates. No new math: outcomes come from
+memory.compute_outcome, verdicts from memory.verdict.
 
 Repeated analyses of the same call (reruns, autopilot sessions) count once
 per (ticker, date, decision), the same dedupe rule as the benchmark
@@ -13,7 +11,6 @@ scorecard; without it a re-run multiplies one call's outcome in every rate.
 """
 
 import asyncio
-from datetime import date, datetime, timedelta, timezone
 
 from app import memory
 from app.config import settings
@@ -117,6 +114,10 @@ def _avoided_slides(rows: list[dict]) -> list[dict]:
 async def accuracy_report() -> dict:
     """Graded unique calls (newest first), aggregates, per-signal comparison,
     avoided slides, pending count."""
+    # P1.17: settle everything due first (a no-op when the scheduled pass just
+    # ran); what remains unmatured is pending - not due yet, or due with no
+    # gradeable closes, which stays visible instead of hiding the gap.
+    await memory.settle_pending()
     all_rows = await asyncio.to_thread(memory._select_all)
     # One row per unique call: reruns and autopilot re-analyses of the same
     # ticker on the same day with the same decision are the same call.
@@ -129,50 +130,8 @@ async def accuracy_report() -> dict:
         seen.add(key)
         rows.append(row)
 
-    today = datetime.now(timezone.utc).date()
-    graded: list[dict] = []
-    pending = 0
-    # Stale = no stored outcome yet. Rows whose window cannot have closed yet
-    # are pending without any price download.
-    stale: dict[str, list[dict]] = {}
-    for row in rows:
-        if row["mature"] and row["realized_return_pct"] is not None:
-            graded.append(row)
-            continue
-        try:
-            decided = date.fromisoformat(row["date"])
-        except ValueError:
-            pending += 1
-            continue
-        target = decided + timedelta(
-            days=row["horizon_days"] or settings.memory_horizon_days
-        )
-        if target > today:
-            pending += 1  # no close on/after the target can exist yet
-            continue
-        stale.setdefault(row["ticker"], []).append(row)
-
-    for ticker, ticker_rows in stale.items():
-        start = min(row["date"] for row in ticker_rows)
-        closes, spy_closes = await memory._fetch_closes_pair(ticker, start)
-        for row in ticker_rows:
-            outcome = memory.compute_outcome(row, closes, spy_closes)
-            if outcome is not None and outcome["mature"]:
-                reflection = memory.deterministic_reflection(row, outcome)
-                await asyncio.to_thread(memory._store_outcome, row["id"], outcome, reflection)
-                row.update(
-                    {
-                        "realized_return_pct": outcome["realized_return_pct"],
-                        "spy_return_pct": outcome["spy_return_pct"],
-                        "alpha_vs_spy_pct": outcome["alpha_vs_spy_pct"],
-                        "window_days": outcome["window_days"],
-                    }
-                )
-                graded.append(row)
-            else:
-                # Window closed but no gradeable closes came back; stays
-                # pending so the count shows the gap instead of hiding it.
-                pending += 1
+    graded = [row for row in rows if row["mature"] and row["realized_return_pct"] is not None]
+    pending = len(rows) - len(graded)
 
     graded.sort(key=lambda row: (row["date"], row["id"]), reverse=True)
     payloads = [_row_payload(row) for row in graded]

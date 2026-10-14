@@ -112,6 +112,7 @@ async def startup() -> None:
     # interval reconciliation sweep, BEFORE anything can submit new orders.
     await broker.reconcile_startup()
     broker.start_sync_loop()
+    memory.start()  # P1.17: settle matured decisions on a schedule
     automation.start()
     mode = "mock (no LLM_API_KEY)" if not settings.llm_configured else settings.llm_model
     logger.info("[startup] BetterTradingAgents ready | llm=%s", mode)

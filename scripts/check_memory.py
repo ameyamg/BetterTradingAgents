@@ -189,6 +189,49 @@ async def main():
     assert all(r["ticker"] == "NVDA" for r in refl["past_decisions"])
     print("cross-ticker lessons OK:", cross[0]["reflection"])
 
+    # ---- scheduled settling (P1.17): due decisions mature without a rerun ----
+    # A call on a ticker never analyzed again must still reach the track
+    # record: the settle pass grades every row whose horizon window closed.
+    await memory.record_decision("seedzzz", make_analysis("ZZZ", "BUY", 100.0), decision_date=D30)
+    await memory.record_decision("seedzzz", make_analysis("ZZZ", "HOLD", 100.0), decision_date=TODAY_ISO)
+    zzz_closes, zzz_spy = {D30: 100.0, D21: 110.0}, {D30: 400.0, D21: 404.0}
+
+    async def zzz_pair(ticker, start):
+        return dict(zzz_closes), dict(zzz_spy)
+
+    memory._fetch_closes_pair = zzz_pair
+    settled = await memory.settle_pending()
+    assert settled == 1, settled  # only the 30d-old BUY is due (the D5 HOLD is not)
+    with memory._connect() as conn:
+        rows = conn.execute(
+            "SELECT decision, mature, realized_return_pct, alpha_vs_spy_pct "
+            "FROM decisions WHERE ticker = 'ZZZ'"
+        ).fetchall()
+    by_decision = {r["decision"]: dict(r) for r in rows}
+    assert by_decision["BUY"]["mature"] == 1
+    assert abs(by_decision["BUY"]["realized_return_pct"] - 10.0) < 0.01
+    assert by_decision["HOLD"]["mature"] == 0, "a not-yet-due row stays open"
+    assert await memory.settle_pending() == 0, "settling is idempotent"
+    assert memory._is_due({"date": "not-a-date", "horizon_days": None}, TODAY) is False
+    print("settle pass OK: due row matured, young row untouched, pass is idempotent")
+
+    # The Accuracy page rides the same pass: settled rows are graded, the
+    # never-due ones count as pending.
+    from app.accuracy import accuracy_report
+
+    report = await accuracy_report()
+    graded_rows = [r for r in report["rows"] if r["ticker"] == "ZZZ"]
+    assert len(graded_rows) == 1 and graded_rows[0]["verdict"] == "right", graded_rows
+    assert report["pending"] >= 1  # the today-dated HOLD among them
+    print("accuracy via settle OK: ZZZ graded right, young rows stay pending")
+
+    # The scheduled loop exists, sleeps first (offline checks never trigger
+    # downloads), and is idempotent to spawn.
+    memory.start()
+    await asyncio.sleep(0.05)
+    assert memory._settle_task is not None and not memory._settle_task.done()
+    memory._settle_task.cancel()
+
     # ---- e2e (mock agents, real yfinance): record + inject -------------------
     from app.tools.market_data import get_closes_between
 
