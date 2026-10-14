@@ -19,6 +19,7 @@ Ranking follows the published cross-sectional momentum literature:
 
 import asyncio
 import logging
+from collections.abc import Collection
 from math import sqrt
 from statistics import mean, pstdev
 from threading import Lock
@@ -56,15 +57,31 @@ CONTINUATION_WEIGHTS = {
 }
 
 
-async def discover_stocks(outlook: Outlook, limit: int = 5) -> dict:
-    """Return the strongest risk-adjusted momentum candidates right now."""
+async def discover_stocks(
+    outlook: Outlook, limit: int = 5, exclude: Collection[str] = ()
+) -> dict:
+    """Return the strongest risk-adjusted momentum candidates right now.
+
+    `exclude` names (autopilot's recently analyzed tickers) are held back so
+    a scheduled loop does not re-run the same deterministic shortlist for
+    weeks; if the eligible pool runs short, the strongest excluded names
+    backfill the list, so a caller never gets fewer than `limit` results
+    just because of the rotation.
+    """
     (histories, market_caps), cache_hit = await asyncio.to_thread(_cached_candidates)
-    ranked = rank_candidates(histories, market_caps, outlook, limit)
-    if len(ranked) < limit:
-        raise ValueError("not enough current market data to select five candidates")
+    ranked = rank_candidates(histories, market_caps, outlook, len(histories))
+    excluded = {ticker.upper() for ticker in exclude}
+    fresh = [item for item in ranked if item["ticker"] not in excluded]
+    backfill = [item for item in ranked if item["ticker"] in excluded]
+    chosen = (fresh + backfill)[:limit]
+    if len(chosen) < limit:
+        raise ValueError(
+            f"not enough current market data to select {limit} candidates"
+        )
     return {
-        "tickers": [item["ticker"] for item in ranked],
+        "tickers": [item["ticker"] for item in chosen],
         "universe_size": len(histories),
+        "excluded_tickers": sorted(excluded),
         "minimum_market_cap_usd": MIN_MARKET_CAP_USD,
         "maximum_market_cap_usd": MAX_MARKET_CAP_USD,
         "minimum_revenue_growth_pct": MIN_REVENUE_GROWTH_PCT,

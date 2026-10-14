@@ -2,16 +2,18 @@
 
 The loop turns the app's own pipeline into a scheduled trader. Each session:
 discover the strongest candidates (the same research-backed screen behind
-"I Am Feeling Lucky"), add every held ticker so SELL decisions can act on
-open positions, run the full agent workflow as one ordinary run (owner
-"automation", visible in run history and via every order's decision link),
-then submit the trades it agrees with through broker.submit_order - the
-same guarded path a human click uses, so the kill switch, per-order and
-daily caps, decision-freshness check, and anti-short haircut all still
-apply. Sizing comes from the risk gate's suggested_size_usd; BUYs also
-need at least AUTOMATION_MIN_CONFIDENCE and are skipped for tickers
-already held (autopilot never adds to a position); SELLs only exit
-positions actually held.
+"I Am Feeling Lucky", with names analyzed in the last
+AUTOMATION_CANDIDATE_COOLDOWN_DAYS days rotated out so the shortlist does
+not repeat for weeks; 0 disables the rotation), add every held ticker so
+SELL decisions can act on open positions, run the full agent workflow as
+one ordinary run (owner "automation", visible in run history and via every
+order's decision link), then submit the trades it agrees with through
+broker.submit_order - the same guarded path a human click uses, so the
+kill switch, per-order and daily caps, decision-freshness check, and
+anti-short haircut all still apply. Sizing comes from the risk gate's
+suggested_size_usd; BUYs also need at least AUTOMATION_MIN_CONFIDENCE and
+are skipped for tickers already held (autopilot never adds to a position);
+SELLs only exit positions actually held.
 
 Nothing trades unless every layer is on: Alpaca keys configured, the
 ALPACA_TRADING_ENABLED kill switch up, a real LLM configured (mock
@@ -111,11 +113,12 @@ async def init() -> None:
     if await enabled():
         logger.info(
             "[automation] enabled | every %d min while the market is open "
-            "(candidates=%d, min_confidence=%.2f, depth=%s)",
+            "(candidates=%d, min_confidence=%.2f, depth=%s, candidate_cooldown=%dd)",
             settings.automation_interval_minutes,
             settings.automation_candidates,
             settings.automation_min_confidence,
             settings.automation_depth,
+            settings.automation_candidate_cooldown_days,
         )
     else:
         logger.info("[automation] disabled")
@@ -186,6 +189,30 @@ def _finish_session(
                 session_id,
             ),
         )
+
+
+def _recent_candidate_tickers(cutoff: float) -> list[str]:
+    """Tickers analyzed by sessions that started after `cutoff` (deduped).
+
+    Feeds the candidate rotation: names the loop already looked at recently
+    are held out of the next shortlist, so sessions explore the rest of the
+    screen instead of re-running the same deterministic top names."""
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT tickers_json FROM automation_sessions WHERE started_at >= ?",
+            (cutoff,),
+        ).fetchall()
+    recent: dict[str, None] = {}
+    for row in rows:
+        try:
+            tickers = json.loads(row["tickers_json"] or "[]")
+        except ValueError:
+            continue
+        if not isinstance(tickers, list):
+            continue
+        for ticker in tickers:
+            recent.setdefault(str(ticker).upper(), None)
+    return list(recent)
 
 
 def _list_sessions(limit: int = 20) -> list[AutomationSession]:
@@ -310,18 +337,37 @@ async def _run_session_locked(trigger: str) -> AutomationSession:
 
     candidates: list[str] = []
     discovery_note = ""
+    # Rotation: a deterministic screen would hand the loop the same top names
+    # every session for weeks. Names analyzed in the cooldown window are held
+    # back, so the shortlist moves down the ranking (backfilled only if the
+    # fresh pool runs short). Held tickers are added regardless, further down.
+    exclude: list[str] = []
+    if settings.automation_candidate_cooldown_days > 0:
+        cutoff = started_at - settings.automation_candidate_cooldown_days * 86400
+        exclude = await asyncio.to_thread(_recent_candidate_tickers, cutoff)
     try:
         from app.discovery import discover_stocks
 
         discovery = await discover_stocks(
             normalize_outlook(settings.automation_outlook),
             settings.automation_candidates,
+            exclude=exclude,
         )
         candidates = [t for t in discovery["tickers"] if t not in held_map]
+        if exclude:
+            logger.info(
+                "[automation] rotation: %d recent ticker(s) held back "
+                "(cooldown %d day(s))",
+                len(exclude),
+                settings.automation_candidate_cooldown_days,
+            )
     except Exception as exc:  # noqa: BLE001 - fall back to a held-only session
         discovery_note = f"discovery failed: {exc}"
 
-    tickers = list(dict.fromkeys(candidates + list(held_map)))[:MAX_SESSION_TICKERS]
+    # Held positions come first so the cost cap can only ever drop rotating
+    # candidates, never an open position that still needs its sell-or-hold
+    # decision; discovery failing entirely still leaves a held-only session.
+    tickers = list(dict.fromkeys(list(held_map) + candidates))[:MAX_SESSION_TICKERS]
     if not tickers:
         return await _skip(
             trigger, discovery_note or "no candidates and no held positions", started_at

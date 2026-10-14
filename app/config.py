@@ -164,6 +164,14 @@ class Settings:
         15, int(_env("AUTOMATION_INTERVAL_MINUTES", "240"))
     )
     automation_candidates: int = max(1, int(_env("AUTOMATION_CANDIDATES", "3")))
+    # The discovery screen is deterministic, so without a cooldown every
+    # session re-runs the same top names (and re-analyzing a held name is
+    # wasted work: autopilot never adds to a position). Candidates analyzed
+    # by sessions in the last N days are rotated out of the shortlist; they
+    # backfill once the fresh pool runs short. 0 disables the rotation.
+    automation_candidate_cooldown_days: int = max(
+        0, int(_env("AUTOMATION_CANDIDATE_COOLDOWN_DAYS", "3"))
+    )
     # BUYs need at least this final (risk-gated) confidence; SELLs always act
     # because they only exit positions already held.
     automation_min_confidence: float = float(_env("AUTOMATION_MIN_CONFIDENCE", "0.65"))

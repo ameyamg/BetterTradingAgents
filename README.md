@@ -115,9 +115,11 @@ exports the whole thing as a self-contained HTML file, and closing the page forg
 server-side. The manager chat still works, grounded in that run's research alone.
 
 With paper trading configured, the Trades page also carries the **Autopilot** card: enable it
-and a background loop runs full trading sessions on a schedule, scanning the market for
-candidates, adding held tickers, and submitting only the risk-gated trades it agrees with
-through the same guarded broker path as a manual click. Desktop notifications can tell you
+and a background loop runs full trading sessions on a schedule. Each session always re-checks
+every held position (sell-or-hold) and scans the market for fresh candidates, rotating away
+names it analyzed in the last few days (`AUTOMATION_CANDIDATE_COOLDOWN_DAYS`) so the shortlist
+does not repeat for weeks. It submits only the risk-gated trades it agrees with through the
+same guarded broker path as a manual click. Desktop notifications can tell you
 when a session finishes. Scheduled sessions only trade while the market is open; every order
 is simulated paper, never live.
 
@@ -149,7 +151,7 @@ The settings most people touch:
 | `TSFM_API_KEY` | Not set | 5-day forecast (TSFM.ai Chronos-2), used when TimeGPT is unavailable |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch: `1` allows order submissions |
-| `AUTOMATION_*` | see `.env.example` | Autopilot knobs: interval, candidates, confidence bar, outlook, depth, sells |
+| `AUTOMATION_*` | see `.env.example` | Autopilot knobs: interval, candidates, candidate cooldown, confidence bar, outlook, depth, sells |
 
 Per-role model splits, cost overrides, risk caps, memory, and backtest settings are
 documented in the wiki's

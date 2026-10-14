@@ -43,6 +43,7 @@ RECENT = datetime.now(timezone.utc).isoformat()
 
 REAL_CLIENT = broker._client
 REAL_DISCOVER = discovery.discover_stocks
+REAL_CACHED = discovery._cached_candidates
 REAL_STORE_CREATE = store.create
 
 
@@ -53,6 +54,7 @@ def _use(fake):
 def _restore():
     broker._client = REAL_CLIENT
     discovery.discover_stocks = REAL_DISCOVER
+    discovery._cached_candidates = REAL_CACHED
     store.create = REAL_STORE_CREATE
 
 
@@ -170,6 +172,30 @@ async def checks() -> None:
     assert await automation.enabled() is False
     print("toggle persists OK")
 
+    # ---- discovery rotation: recent picks are held back, never starved ------
+    def _trend(step: float) -> list[float]:
+        return [100 * (1 + step) ** i for i in range(200)]
+
+    pool = {"AAA": 0.004, "BBB": 0.003, "CCC": 0.002, "DDD": 0.001, "EEE": 0.0005}
+    snapshot = (
+        ({ticker: _trend(step) for ticker, step in pool.items()},
+         {ticker: 2_000_000_000 for ticker in pool}),
+        False,
+    )
+    discovery._cached_candidates = lambda: snapshot
+    try:
+        plain = await discovery.discover_stocks("short_term", 3)
+        assert plain["tickers"] == ["AAA", "BBB", "CCC"], plain["tickers"]
+        rotated = await discovery.discover_stocks("short_term", 3, exclude={"AAA", "BBB"})
+        assert rotated["tickers"] == ["CCC", "DDD", "EEE"], rotated["tickers"]
+        # Everything excluded: the strongest names backfill instead of failing.
+        starved = await discovery.discover_stocks("short_term", 3, exclude=set(pool))
+        assert starved["tickers"] == ["AAA", "BBB", "CCC"], starved["tickers"]
+        assert rotated["excluded_tickers"] == ["AAA", "BBB"]
+    finally:
+        discovery._cached_candidates = REAL_CACHED
+    print("discovery rotation OK (fresh first, strongest backfill, no-exclude unchanged)")
+
     # ---- skip ladder: every gate records its reason, nothing trades --------
     session = await automation.run_session("schedule")
     assert session.status == "skipped" and "not configured" in session.error
@@ -192,7 +218,7 @@ async def checks() -> None:
     print("skip ladder OK (unconfigured, kill switch, mock, market closed)")
 
     # ---- discovery dead + nothing held: skipped, not crashed ----------------
-    async def _dead_discovery(outlook, limit):
+    async def _dead_discovery(outlook, limit, exclude=()):
         raise ValueError("not enough current market data")
 
     discovery.discover_stocks = _dead_discovery
@@ -203,7 +229,7 @@ async def checks() -> None:
     print("discovery failure with no holdings -> skipped OK")
 
     # ---- happy path: one scan -> one run -> guarded orders ------------------
-    async def _fake_discovery(outlook, limit):
+    async def _fake_discovery(outlook, limit, exclude=()):
         assert limit == settings.automation_candidates
         return {"tickers": ["NVDA", "MSFT", "GOOG"]}
 
@@ -234,7 +260,8 @@ async def checks() -> None:
     session = await automation.run_session("schedule")
     assert session.status == "completed", session.error
     assert session.run_id == "autorun01"
-    assert session.tickers == ["NVDA", "MSFT", "GOOG"], session.tickers
+    # Held positions come first, so the session cap can never drop one.
+    assert session.tickers == ["MSFT", "GOOG", "NVDA"], session.tickers
     assert session.decisions == {
         "NVDA": "BUY", "AMD": "BUY", "MSFT": "SELL", "GOOG": "BUY", "TSLA": "HOLD",
     }
@@ -251,6 +278,55 @@ async def checks() -> None:
     assert latest.status == "completed" and latest.run_id == "autorun01"
     assert latest.decisions["TSLA"] == "HOLD" and len(latest.orders) == 2
     print("happy path OK (dedup, sizing, sell haircut, held guard, confidence bar)")
+
+    # ---- candidate rotation: the last session's picks are held back ---------
+    captured_excludes: list[set[str]] = []
+
+    async def _capturing_discovery(outlook, limit, exclude=()):
+        captured_excludes.append(set(exclude))
+        return {"tickers": ["AAPL"]}
+
+    discovery.discover_stocks = _capturing_discovery
+    fake = _FakeClient(
+        account=_raw_account(),
+        positions=[_raw_position("MSFT", "2000.00"), _raw_position("GOOG", "1500.00")],
+    )
+    _use(fake)
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error
+    assert {"NVDA", "MSFT", "GOOG"} <= captured_excludes[0], captured_excludes
+
+    settings.automation_candidate_cooldown_days = 0
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error
+    assert captured_excludes[1] == set(), captured_excludes[1]
+    settings.automation_candidate_cooldown_days = 3
+    print("candidate rotation OK (recent picks excluded; cooldown 0 disables)")
+
+    # ---- held positions are always checked, even at the session cap ---------
+    held8 = [f"HELD{i}" for i in range(8)]
+    cap_results = {t: _analysis(t, "HOLD", 0.5) for t in held8 + ["CAND1", "CAND2", "CAND3"]}
+
+    async def _cap_discovery(outlook, limit, exclude=()):
+        return {"tickers": ["CAND1", "CAND2", "CAND3"]}
+
+    async def _cap_create(tickers, client_id="", outlook="", depth=""):
+        return _FakeRun("caprun01", {t: cap_results[t] for t in tickers})
+
+    discovery.discover_stocks = _cap_discovery
+    store.create = _cap_create
+    fake = _FakeClient(
+        account=_raw_account(),
+        positions=[_raw_position(t, "1000.00") for t in held8],
+    )
+    _use(fake)
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error
+    assert set(held8) <= set(session.tickers), session.tickers
+    assert len(session.tickers) == automation.MAX_SESSION_TICKERS
+    # 8 held + 3 candidates = 11 > cap: the rotating candidate is the one cut.
+    assert sum(t.startswith("CAND") for t in session.tickers) == 2, session.tickers
+    print("held positions survive the session cap OK")
 
     # ---- a crashed analysis run records a failed session --------------------
     async def _crashing_run(tickers, client_id="", outlook="", depth=""):

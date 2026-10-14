@@ -347,7 +347,7 @@ async def checks() -> None:
     fake = _FakeClient(account=_raw_account())
     _use(fake)
 
-    async def _fake_discovery(outlook, limit):
+    async def _fake_discovery(outlook, limit, exclude=()):
         return {"tickers": ["NVDA"]}
 
     discovery.discover_stocks = _fake_discovery

@@ -153,6 +153,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
         "fields": [
             _field("automation_interval_minutes", "AUTOMATION_INTERVAL_MINUTES", "Minutes between sessions", "int", lo=15, hi=10080, section="Schedule", hint="Minimum 15", example="240"),
             _field("automation_candidates", "AUTOMATION_CANDIDATES", "Candidates per session", "int", lo=1, hi=10, section="Schedule", hint="Shortlist size from the market scan", example="3"),
+            _field("automation_candidate_cooldown_days", "AUTOMATION_CANDIDATE_COOLDOWN_DAYS", "Candidate cooldown (days)", "int", lo=0, hi=30, section="Schedule", hint="Names analyzed in the last N days rest, so picks rotate; 0 disables", example="3"),
             _field("automation_session_timeout_minutes", "AUTOMATION_SESSION_TIMEOUT_MINUTES", "Session timeout (minutes)", "int", lo=5, hi=240, section="Schedule", hint="Longer sessions are cancelled and recorded failed", example="40"),
             _field("automation_min_confidence", "AUTOMATION_MIN_CONFIDENCE", "BUY confidence bar", "float", lo=0, hi=1, section="Trading rules", hint="BUYs below this are skipped; SELLs always act", example="0.65 (= 65%)"),
             _field("automation_outlook", "AUTOMATION_OUTLOOK", "Outlook", section="Trading rules", choices=("day_trade", "short_term", "long_term")),
