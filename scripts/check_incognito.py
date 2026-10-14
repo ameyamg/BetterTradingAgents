@@ -124,6 +124,15 @@ original_analyze = runs.analyze_ticker
 analyze_calls: list[dict] = []
 
 
+async def _no_portfolio():
+    # Hermetic by construction: the analysis cache key embeds the portfolio,
+    # so live paper-account data here flips the key between two normal runs
+    # and the repeat-cache assert flakes. None is the unconfigured answer,
+    # and .env keys cannot be blanked away (dotenv wins over an empty shell
+    # variable).
+    return None
+
+
 async def fake_analyze(ticker: str, emit, **kwargs) -> StockAnalysis:
     analyze_calls.append({"ticker": ticker, **kwargs})
     await emit("ticker_started", {"ticker": ticker})
@@ -150,6 +159,8 @@ async def api_checks():
     await memory.init()
     await run_history.init()
     runs.analyze_ticker = fake_analyze
+    original_fetch = runs.fetch_portfolio_summary
+    runs.fetch_portfolio_summary = _no_portfolio
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
@@ -255,6 +266,7 @@ async def api_checks():
             print("lifecycle OK: pruning bounded, mid-run discard cancels + forgets")
     finally:
         runs.analyze_ticker = original_analyze
+        runs.fetch_portfolio_summary = original_fetch
 
 
 asyncio.run(workflow_checks())
