@@ -62,6 +62,9 @@ class Settings:
     max_tickers: int = int(_env("MAX_TICKERS", "5"))
     # 1 = single round; >= 2 adds one bull/bear rebuttal exchange (capped at 3).
     debate_rounds: int = min(3, max(1, int(_env("DEBATE_ROUNDS", "2"))))
+    # Wall-clock deadline for one analysis run (P2.8): a provider that hangs
+    # must fail the run instead of leaving it "running" forever.
+    run_timeout_minutes: int = max(5, int(_env("RUN_TIMEOUT_MINUTES", "30")))
 
     # Demo portfolio
     starting_cash: float = float(_env("STARTING_CASH", "100000"))

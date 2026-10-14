@@ -14,6 +14,9 @@ from app.workflow import analyze_ticker, fetch_held_closes, fetch_portfolio_summ
 
 logger = logging.getLogger("analysis")
 ANALYSIS_CACHE_TTL_SECONDS = 60 * 60
+# How long a finished run stays in memory after persisting, so a browser tab
+# whose SSE stream dropped mid-run can reconnect and replay its ending.
+FINISHED_RUN_GRACE_SECONDS = 600
 
 # Cache key: ticker, outlook, depth, debate rounds, mock mode, portfolio (or
 # "unavailable"), incognito, then the sizing/gating settings that shape the
@@ -105,6 +108,8 @@ class RunStore:
     ) -> Run:
         if incognito:
             self._prune_incognito()
+        else:
+            self._prune_finished()
         run = Run(tickers, client_id, outlook, depth, incognito=incognito)
         self.runs[run.run_id] = run
         if not incognito:
@@ -266,8 +271,17 @@ class RunStore:
             waiters.discard(run.run_id)
             if not waiters:
                 self.analysis_waiters.pop(key, None)
-            if self.analysis_inflight.get(key) is task and task.done():
-                self.analysis_inflight.pop(key, None)
+                shared = self.analysis_inflight.get(key)
+                if shared is task:
+                    # The last waiter left: a finished analysis just leaves
+                    # the map, an unfinished one (a cancel or the run
+                    # deadline) is stopped first, so a later run starts
+                    # fresh instead of joining a zombie that hangs until its
+                    # own deadline (P2.8). A newer task under this key is
+                    # never touched: it belongs to other waiters.
+                    self.analysis_inflight.pop(key, None)
+                    if not shared.done():
+                        shared.cancel()
 
     async def _analyze_one(
         self,
@@ -340,6 +354,10 @@ class RunStore:
 
     async def _execute(self, run: Run) -> None:
         try:
+            # P2.8: every hangable phase runs under the run deadline, so one
+            # hung provider call fails this run instead of leaving it
+            # "running" forever.
+            deadline = settings.run_timeout_minutes * 60
             semaphore = asyncio.Semaphore(settings.max_tickers)
             # One portfolio snapshot per run, shared by every ticker's manager
             # prompt and risk gate (instead of one fetch per ticker), plus one
@@ -349,8 +367,12 @@ class RunStore:
                 portfolio_summary = None
                 held_closes = {}
             else:
-                portfolio_summary = await fetch_portfolio_summary()
-                held_closes = await fetch_held_closes(portfolio_summary)
+                portfolio_summary = await asyncio.wait_for(
+                    fetch_portfolio_summary(), deadline
+                )
+                held_closes = await asyncio.wait_for(
+                    fetch_held_closes(portfolio_summary), deadline
+                )
 
             if not run.cancel_requested:
                 async def analyze_one(ticker: str) -> StockAnalysis:
@@ -374,9 +396,17 @@ class RunStore:
                     )
                     for ticker in run.tickers
                 }
-                results = await asyncio.gather(*run.ticker_tasks.values())
+                results = await asyncio.wait_for(
+                    asyncio.gather(*run.ticker_tasks.values()), deadline
+                )
                 run.results = {result.ticker: result for result in results}
                 run.status = "completed"
+        except asyncio.TimeoutError:
+            # The deadline fired under a hung phase: fail the run instead of
+            # leaving it "running" forever (P2.8).
+            run.status = "failed"
+            run.error = f"run timed out after {settings.run_timeout_minutes} min"
+            logger.error("[analysis] run %s timed out", run.run_id)
         except asyncio.CancelledError:
             # RunStore.cancel stopped the child tasks, not this coroutine:
             # settle them so the partial results are final, then terminate.
@@ -397,6 +427,11 @@ class RunStore:
         run.completed_at = time.time()
         if not run.incognito:
             await self._persist(run)
+            # P2.8: the SQLite row is the run's home once persisted. Finished
+            # runs get a short reconnect grace in memory (an SSE tab that
+            # dropped mid-run replays its ending), then leave on the next
+            # create; get_status, chat, and orders read through run_history.
+            self._prune_finished()
         await run.emit(
             "analysis_completed",
             {
@@ -406,6 +441,17 @@ class RunStore:
                 "error": run.error,
             },
         )
+
+    def _prune_finished(self) -> None:
+        """Drop terminal non-incognito runs whose reconnect grace has passed."""
+        cutoff = time.time() - FINISHED_RUN_GRACE_SECONDS
+        for run_id, run in list(self.runs.items()):
+            if (
+                not run.incognito
+                and run.status != "running"
+                and (run.completed_at or 0) < cutoff
+            ):
+                self.runs.pop(run_id, None)
 
 
 store = RunStore()

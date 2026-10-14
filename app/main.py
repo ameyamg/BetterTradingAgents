@@ -409,8 +409,13 @@ async def run_events(run_id: str):
         queue: asyncio.Queue = asyncio.Queue()
         run.queues.append(queue)
         try:
-            replayed = {id(event) for event in run.events}
-            for event in run.events:
+            # P2.8: replay from a snapshot, not the live list. Iterating
+            # run.events directly re-picked up events appended while this
+            # generator was suspended at a yield, and the queue then delivered
+            # the same event a second time.
+            replay = list(run.events)
+            replayed = {id(event) for event in replay}
+            for event in replay:
                 yield _sse(event)
             while True:
                 event = await queue.get()
