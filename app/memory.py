@@ -11,6 +11,11 @@ Portfolio Manager dossier and shown on the result card.
 Reflections are a deterministic sentence by default; `MEMORY_REFLECT_WITH_LLM=1`
 asks a one-shot crew for a 2-sentence lesson instead (mature rows only, so the
 extra cost is paid at most once per decision).
+
+Since P1.17 the lazy per-ticker grading is no longer the only path: a
+scheduled `settle_pending()` pass grades every decision whose horizon window
+has closed, whether or not its ticker is analyzed again, so the scorecard,
+the calibration, and the cross-ticker lessons fill in on their own.
 """
 
 import asyncio
@@ -511,3 +516,82 @@ async def get_reflections(ticker: str) -> dict:
     cross_rows = await asyncio.to_thread(_select_cross_lessons, ticker, MAX_CROSS_LESSONS)
     cross = [_reflection_row(row, _stored_outcome(row), row["reflection"]) for row in cross_rows]
     return {"past_decisions": reflections, "cross_ticker_lessons": cross}
+
+
+# ---------------------------------------------------------------------------
+# Scheduled settling (ROADMAP P1.17)
+# ---------------------------------------------------------------------------
+
+_settle_task: asyncio.Task | None = None
+
+
+def _select_unmatured() -> list[dict]:
+    with _connect() as connection:
+        rows = connection.execute(
+            "SELECT * FROM decisions WHERE mature = 0 ORDER BY ticker, date, id"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _is_due(row: dict, today: date) -> bool:
+    """True when the horizon target is on or before `today`, so an exit close
+    can exist. Shared by the settle pass and the Accuracy page's pending
+    count; a row with an unreadable date is never due (and never graded)."""
+    try:
+        decided = date.fromisoformat(str(row["date"]))
+    except (TypeError, ValueError):
+        return False
+    horizon = row["horizon_days"] or settings.memory_horizon_days
+    return (decided + timedelta(days=int(horizon))) <= today
+
+
+async def settle_pending() -> int:
+    """Grade every decision whose horizon window has closed (P1.17).
+
+    The lazy path in get_reflections only grades the ticker being analyzed,
+    so a call on a ticker never analyzed again stayed unmatured forever and
+    never reached the track record or the calibration. This pass settles all
+    of them; grading rules stay in compute_outcome/verdict, this only changes
+    when they run. Returns how many rows matured.
+    """
+    rows = await asyncio.to_thread(_select_unmatured)
+    today = datetime.now(timezone.utc).date()
+    due: dict[str, list[dict]] = {}
+    for row in rows:
+        if _is_due(row, today):
+            due.setdefault(row["ticker"], []).append(row)
+    settled = 0
+    for ticker, ticker_rows in due.items():
+        start = min(row["date"] for row in ticker_rows)
+        closes, spy_closes = await _fetch_closes_pair(ticker, start)
+        for row in ticker_rows:
+            outcome = compute_outcome(row, closes, spy_closes)
+            if outcome is not None and outcome["mature"]:
+                await asyncio.to_thread(
+                    _store_outcome,
+                    row["id"],
+                    outcome,
+                    deterministic_reflection(row, outcome),
+                )
+                settled += 1
+    if settled:
+        logger.info("[memory] settled %d matured decision(s)", settled)
+    return settled
+
+
+async def _settle_loop() -> None:
+    # Sleep-first: the first pass waits a full interval, so short-lived
+    # processes (the offline checks) never trigger the price downloads.
+    while True:
+        await asyncio.sleep(max(15, settings.memory_settle_interval_minutes) * 60)
+        try:
+            await settle_pending()
+        except Exception as exc:  # noqa: BLE001 - the loop outlives any bug
+            logger.warning("[memory] settle pass failed: %s", exc)
+
+
+def start() -> None:
+    """Spawn the settle loop (idempotent; called from app startup)."""
+    global _settle_task
+    if _settle_task is None or _settle_task.done():
+        _settle_task = asyncio.create_task(_settle_loop(), name="memory-settle")

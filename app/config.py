@@ -103,6 +103,12 @@ class Settings:
     # Decision memory (wiki Roadmap 1.1): days a decision is held before its
     # outcome is final; LLM-written reflections are opt-in (off = deterministic).
     memory_horizon_days: int = max(1, int(_env("MEMORY_HORIZON_DAYS", "21")))
+    # Scheduled settling (wiki Roadmap P1.17): every interval, decisions whose
+    # horizon window closed are graded even if their ticker is never analyzed
+    # again, so the scorecard fills in on its own.
+    memory_settle_interval_minutes: int = max(
+        15, int(_env("MEMORY_SETTLE_INTERVAL_MINUTES", "60"))
+    )
     memory_reflect_with_llm: bool = _env("MEMORY_REFLECT_WITH_LLM", "0").lower() in (
         "1",
         "true",
