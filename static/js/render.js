@@ -402,6 +402,12 @@ export function renderResultCard(analysis) {
   if (costRoles.length) {
     metaBits.push(`model cost ${costEst.priced ? "~" : "at least "}${fmtCostUsd(costEst.total_usd)} (${(costEst.unpriced_models || []).length ? `no known price for ${costEst.unpriced_models.map(escapeHtml).join(", ")}` : `provider list prices as of ${escapeHtml(costEst.prices_as_of || "")}`})`);
   }
+  // Per-stage wall times (P2.14): researchers overlap, so they can sum to
+  // more than the run's duration.
+  const stageBits = Object.entries(analysis.stage_timings_s || {}).map(
+    ([stage, secs]) => `${stage === "data_fetch" ? "data" : stage} ${Number(secs).toFixed(1)}s`
+  );
+  if (stageBits.length) metaBits.push(`stage times: ${stageBits.join(", ")}`);
   const runMeta = metaBits.length ? `<p class="run-meta">${metaBits.join(" · ")}</p>` : "";
   const profile = depthProfile();
   // One bar shows which side of the debate is stronger. When a judge ran,
