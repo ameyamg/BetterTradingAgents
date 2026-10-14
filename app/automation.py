@@ -47,7 +47,11 @@ POLL_SECONDS = 15.0  # loop granularity; makes the toggle responsive
 
 _loop_task: asyncio.Task | None = None
 _session_task: asyncio.Task | None = None
-_session_active = False
+# The real mutex for "a session is running" (P2.8). The old boolean was only
+# set after three network calls, so two triggers (a schedule tick and a manual
+# "Run now") could both pass the gate and trade at once. Held for the whole
+# session; check .locked() instead of reading a flag.
+_session_lock = asyncio.Lock()
 _next_check_at: float | None = None
 
 
@@ -196,8 +200,11 @@ def _list_sessions(limit: int = 20) -> list[AutomationSession]:
         try:
             summary = json.loads(row["summary_json"] or "{}")
             orders = [AutomationOrderOutcome.model_validate(o) for o in summary.get("orders", [])]
+            tickers = json.loads(row["tickers_json"] or "[]")
         except ValueError:
-            summary, orders = {}, []
+            # A corrupt row renders as an empty session instead of blanking
+            # the whole card (P2.8).
+            summary, orders, tickers = {}, [], []
         sessions.append(
             AutomationSession(
                 id=row["id"],
@@ -206,7 +213,7 @@ def _list_sessions(limit: int = 20) -> list[AutomationSession]:
                 started_at=row["started_at"],
                 finished_at=row["finished_at"],
                 run_id=row["run_id"],
-                tickers=json.loads(row["tickers_json"] or "[]"),
+                tickers=tickers,
                 decisions=summary.get("decisions", {}),
                 orders=orders,
                 error=row["error"],
@@ -218,7 +225,7 @@ def _list_sessions(limit: int = 20) -> list[AutomationSession]:
 async def status_snapshot() -> AutomationStatus:
     return AutomationStatus(
         enabled=await enabled(),
-        session_active=_session_active,
+        session_active=_session_lock.locked(),
         configured=settings.alpaca_configured,
         trading_enabled=settings.alpaca_trading_enabled,
         llm_configured=settings.llm_configured,
@@ -236,13 +243,16 @@ async def status_snapshot() -> AutomationStatus:
 # ---- one session ------------------------------------------------------------
 
 
-def _skip(
+async def _skip(
     trigger: str, reason: str, started_at: float | None = None
 ) -> AutomationSession:
-    """Record a session that did not trade, with the reason why."""
+    """Record a session that did not trade, with the reason why. The writes
+    run off the event loop so a slow disk never blocks the API (P2.8)."""
     started = started_at if started_at is not None else time.time()
-    session_id = _insert_session(trigger, started)
-    _finish_session(session_id, "skipped", None, [], {}, [], reason)
+    session_id = await asyncio.to_thread(_insert_session, trigger, started)
+    await asyncio.to_thread(
+        _finish_session, session_id, "skipped", None, [], {}, [], reason
+    )
     logger.info("[automation] session skipped: %s", reason)
     return AutomationSession(
         id=session_id, trigger=trigger, status="skipped", started_at=started,
@@ -259,28 +269,35 @@ def _final_decisions(results: dict[str, StockAnalysis]) -> dict[str, str]:
 
 
 async def run_session(trigger: str = "schedule") -> AutomationSession:
-    """One full scan -> analyze -> order cycle. Never raises."""
-    global _session_active
+    """One full scan -> analyze -> order cycle. Never raises.
 
-    if _session_active:
-        return _skip(trigger, "another session is already running")
+    The session lock is taken before any network call (P2.8), so a schedule
+    tick racing a manual run sees it held instead of starting a parallel
+    session; everything after the gate is in _run_session_locked.
+    """
+    if _session_lock.locked():
+        return await _skip(trigger, "another session is already running")
+    async with _session_lock:
+        return await _run_session_locked(trigger)
 
+
+async def _run_session_locked(trigger: str) -> AutomationSession:
     started_at = time.time()
     if not settings.alpaca_configured:
-        return _skip(trigger, "Alpaca paper trading is not configured", started_at)
+        return await _skip(trigger, "Alpaca paper trading is not configured", started_at)
     if not settings.alpaca_trading_enabled:
-        return _skip(trigger, "order submissions are disabled (kill switch)", started_at)
+        return await _skip(trigger, "order submissions are disabled (kill switch)", started_at)
     if not settings.llm_configured:
-        return _skip(trigger, "no LLM configured; mock decisions never trade", started_at)
+        return await _skip(trigger, "no LLM configured; mock decisions never trade", started_at)
 
     from app import broker
 
     try:
         clock = await broker.clock()
     except Exception as exc:  # noqa: BLE001 - a broker failure must not kill the loop
-        return _skip(trigger, f"market clock unavailable: {exc}", started_at)
+        return await _skip(trigger, f"market clock unavailable: {exc}", started_at)
     if trigger == "schedule" and not clock["is_open"]:
-        return _skip(
+        return await _skip(
             trigger, f"market closed until {clock.get('next_open') or 'the next open'}",
             started_at,
         )
@@ -288,7 +305,7 @@ async def run_session(trigger: str = "schedule") -> AutomationSession:
     try:
         held = await broker.positions()
     except Exception as exc:  # noqa: BLE001
-        return _skip(trigger, f"paper positions unavailable: {exc}", started_at)
+        return await _skip(trigger, f"paper positions unavailable: {exc}", started_at)
     held_map = {position.symbol: position for position in held}
 
     candidates: list[str] = []
@@ -306,7 +323,7 @@ async def run_session(trigger: str = "schedule") -> AutomationSession:
 
     tickers = list(dict.fromkeys(candidates + list(held_map)))[:MAX_SESSION_TICKERS]
     if not tickers:
-        return _skip(
+        return await _skip(
             trigger, discovery_note or "no candidates and no held positions", started_at
         )
     if discovery_note:
@@ -316,8 +333,7 @@ async def run_session(trigger: str = "schedule") -> AutomationSession:
 
     from app.runs import store
 
-    session_id = _insert_session(trigger, started_at)
-    _session_active = True
+    session_id = await asyncio.to_thread(_insert_session, trigger, started_at)
     orders: list[AutomationOrderOutcome] = []
     status = "completed"
     error: str | None = None
@@ -375,8 +391,9 @@ async def run_session(trigger: str = "schedule") -> AutomationSession:
         status, error = "failed", "session cancelled"
         raise
     finally:
-        _session_active = False
-        _finish_session(session_id, status, run_id, tickers, decisions, orders, error)
+        await asyncio.to_thread(
+            _finish_session, session_id, status, run_id, tickers, decisions, orders, error
+        )
     return AutomationSession(
         id=session_id,
         trigger=trigger,
@@ -406,7 +423,18 @@ async def _act_on_decision(
                 settings.automation_min_confidence * 100,
             )
             return None
-        if ticker in held_map:
+        # held_map is the session-start snapshot; positions can change while
+        # the analysis runs (a manual trade, an earlier exit this session), so
+        # every BUY re-checks against the broker right before ordering (P2.8).
+        try:
+            held_now = {p.symbol for p in await broker.positions()}
+        except Exception as exc:  # noqa: BLE001 - fail closed: skip, never double-buy
+            logger.warning("[automation] %s position re-check failed: %s", ticker, exc)
+            return AutomationOrderOutcome(
+                ticker=ticker, side="buy", status="skipped",
+                error="could not re-check positions before ordering",
+            )
+        if ticker in held_map or ticker in held_now:
             logger.info("[automation] %s already held; never adding to a position", ticker)
             return None
         notional = analysis.suggested_size_usd or settings.default_position_size
@@ -453,7 +481,7 @@ async def _loop() -> None:
     logger.info("[automation] loop started")
     while True:
         try:
-            if await enabled() and not _session_active:
+            if await enabled() and not _session_lock.locked():
                 _next_check_at = time.time()
                 await run_session("schedule")
             _next_check_at = time.time() + settings.automation_interval_minutes * 60
@@ -478,7 +506,7 @@ def start() -> None:
 async def start_manual_session() -> bool:
     """Fire one session now ('Run now'); False when one is already running."""
     global _session_task
-    if _session_active:
+    if _session_lock.locked():
         return False
     _session_task = asyncio.create_task(run_session("manual"), name="automation-manual")
     return True

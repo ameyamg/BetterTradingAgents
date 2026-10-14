@@ -341,6 +341,12 @@ def _age_hours(as_of: str) -> float | None:
 
 # ---- submission (the safety core) -----------------------------------------
 
+# Serializes the guard checks through the row insert (P2.8): the open-order
+# dedupe and the daily cap are read-then-act, and the insert that makes the
+# next caller see them happens in a thread, so concurrent submits could all
+# pass the guards before any row landed. The POST stays outside the lock.
+_submit_lock = asyncio.Lock()
+
 
 async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> BrokerOrder:
     """Place one paper market/day notional order for a run's decision.
@@ -427,29 +433,30 @@ async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> 
                 f"the {ticker} position is worth less than a cent at the live price"
             )
 
-    if _has_active_order(run_id, ticker, side):
-        raise BrokerRuleError(
-            f"an order for {ticker} ({side}) in run {run_id} is already open",
-            status_code=409,
-        )
-    if _non_rejected_orders_today() >= settings.alpaca_max_orders_per_day:
-        raise BrokerRuleError(
-            f"daily paper order cap reached ({settings.alpaca_max_orders_per_day})",
-            status_code=429,
-        )
+    async with _submit_lock:
+        if _has_active_order(run_id, ticker, side):
+            raise BrokerRuleError(
+                f"an order for {ticker} ({side}) in run {run_id} is already open",
+                status_code=409,
+            )
+        if _non_rejected_orders_today() >= settings.alpaca_max_orders_per_day:
+            raise BrokerRuleError(
+                f"daily paper order cap reached ({settings.alpaca_max_orders_per_day})",
+                status_code=429,
+            )
 
-    client_order_id = f"bta-{uuid.uuid4()}"
-    await asyncio.to_thread(
-        _insert_order,
-        client_order_id,
-        run_id,
-        ticker,
-        side,
-        notional,
-        analysis.decision,
-        analysis.confidence,
-        analysis.as_of,
-    )
+        client_order_id = f"bta-{uuid.uuid4()}"
+        await asyncio.to_thread(
+            _insert_order,
+            client_order_id,
+            run_id,
+            ticker,
+            side,
+            notional,
+            analysis.decision,
+            analysis.confidence,
+            analysis.as_of,
+        )
     return await _submit_market_order(client_order_id, ticker, side, notional)
 
 

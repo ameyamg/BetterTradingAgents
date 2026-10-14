@@ -151,7 +151,7 @@ def _analysis(ticker: str, decision: str, confidence: float, size: float | None 
 
 async def _wait_session_done(timeout: float = 5.0) -> None:
     for _ in range(int(timeout / 0.05)):
-        if not automation._session_active:
+        if not automation._session_lock.locked():
             return
         await asyncio.sleep(0.05)
     raise AssertionError("session did not finish in time")
@@ -244,7 +244,7 @@ async def checks() -> None:
     # A sell is haircut to 99.5% of the holding so it can never short.
     assert fake.submit_calls[1].symbol == "MSFT"
     assert abs(fake.submit_calls[1].notional - 1990.0) < 0.01
-    assert automation._session_active is False
+    assert not automation._session_lock.locked()
     # The session row carries the full picture for the UI.
     snapshot = await automation.status_snapshot()
     latest = snapshot.sessions[0]
@@ -305,10 +305,10 @@ async def checks() -> None:
         off = await client.post("/api/automation", json={"enabled": False})
         assert off.json()["enabled"] is False
 
-        automation._session_active = True  # simulate a session in flight
+        await automation._session_lock.acquire()  # simulate a session in flight
         conflict = await client.post("/api/automation/run")
         assert conflict.status_code == 409, conflict.text
-        automation._session_active = False
+        automation._session_lock.release()
 
         started = await client.post("/api/automation/run")
         assert started.status_code == 200 and started.json() == {"started": True}
