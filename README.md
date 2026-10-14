@@ -99,7 +99,7 @@ Copy [`.env.example`](.env.example) to `.env`; every setting is optional.
 |---|---|
 | **Home** | Run an analysis for up to 5 tickers with your outlook (day / short / long term) and depth (Fast / Medium / Expert), or let **I Am Feeling Lucky** screen the market for research candidates. |
 | **History** | Every run is saved with a direct `?run=<id>` link; rerun or cancel from the live view. |
-| **Trades** | Your Alpaca paper account: equity curve, open positions, the order lifecycle this app placed, and per-order return vs SPY. |
+| **Trades** | Your Alpaca paper account: equity curve, open positions, the order lifecycle this app placed, and per-order return vs SPY; a reconciliation sweep settles crashed submissions and an out-of-sync banner flags broker orders this app did not place. |
 | **Settings** | Every knob from `.env` editable in the app, applied live; API keys go to the OS keychain. The **Enable experimentation** switch (Analysis section) adds a tab with opt-in toggles for the retired Accuracy, Compare, and Watchlist pages. |
 
 Watch each agent move from waiting to running to complete, with a progress bar per ticker;
@@ -182,6 +182,7 @@ the defaults live in `app/config.py`.
 | `POST` | `/api/settings` | Save settings; applied immediately, secrets to the OS keychain |
 | `GET` | `/api/broker/account` | Read the Alpaca paper account |
 | `POST` | `/api/broker/orders` | Place one paper order (explicit `confirm`, server-side guards) |
+| `GET` | `/api/broker/sync` | Broker reconciliation state: drift (open orders this app did not place) for the out-of-sync banner |
 | `POST` | `/api/automation/run` | Fire one autopilot session now |
 | `GET` | `/api/health` | Check configuration and provider status |
 
@@ -212,8 +213,9 @@ five trading days for short term, about a month for long term) against real clos
 return and alpha vs SPY. This scorecard is generated, not hand-written:
 `uv run python scripts/benchmark.py --markdown` rebuilds it from the local run history.
 
-As of 2026-10-12: 62 live sessions, 59 unique calls, 12 fully graded (37 still inside their
-21-day window).
+As of 2026-10-14: 66 live sessions, 68 unique calls, 12 fully graded (46 still inside their
+21-day window; a scheduled settle pass now matures every due call even when its ticker
+is not analyzed again).
 
 | What the market did next (21-day window) | The agent's record |
 |---|---|
@@ -223,7 +225,7 @@ As of 2026-10-12: 62 live sessions, 59 unique calls, 12 fully graded (37 still i
 | Same $10,000 per signal, cash results | agent -$206 vs always-buy -$5,262 vs SPY +$339 |
 
 Cost per analysis, measured on the same history: **$0.12 per ticker**; a typical 3-5 ticker
-run lands near **$0.40** at provider list prices. Early data, stated plainly: one month of
+run lands near **$0.39** at provider list prices. Early data, stated plainly: one month of
 live use and 12 graded calls is a small sample. The pattern so far is capital preservation
 first; the BUY record is the weak spot, which is exactly what the risk gate's confidence
 bar guards.
@@ -255,12 +257,16 @@ debate judge (one neutral cross-examination of the bull/bear cases replacing the
 self-scored rebuttal round), the market-regime analyst with rebalanced depth tiers:
 Fast (3 agents, no debate), Pro (7), Max (10) - old "medium" and "expert" values keep
 working everywhere - point-in-time SEC EDGAR fundamentals for honest fundamental
-backtests, incognito mode, and a three-part UI pass (a shared UI layer, a
-decision-first results experience, and real charts).
+backtests, incognito mode, a three-part UI pass (a shared UI layer, a
+decision-first results experience, and real charts), and a reliability pass:
+broker reconciliation sweeps that settle crashed submissions and flag drift with an
+out-of-sync banner (P2.3), serialized order guards with a wall-clock deadline on every
+run (P2.8), and a scheduled settle pass that matures every due decision, even on
+tickers never analyzed again (P1.17).
 
-Next up: guided first-run onboarding (P2.7), deployment and broker-sync hardening
-(P2.2, P2.3), regional benchmarks for non-US tickers (P1.16), and settling every
-due decision on a schedule (P1.17).
+Next up: guided first-run onboarding (P2.7), deployment and operational hardening
+before any shared deployment (P2.2), regional benchmarks for non-US tickers (P1.16),
+and a CI gate that runs the offline checks on every push (P2.15).
 
 ## Disclaimer
 
