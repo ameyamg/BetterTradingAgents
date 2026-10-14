@@ -52,9 +52,34 @@ async function load() {
     renderOrders(orders);
     renderEquityCurve();
     renderPerformance();
+    renderSyncState();
     $("download-csv").classList.toggle("hidden", positions.length === 0);
   } catch (error) {
     setUnconfigured(error.message);
+  }
+}
+
+// P2.3: the reconciliation sweep refreshes local orders by client id and diffs
+// Alpaca's open orders against them; drift (or a failed sweep) shows here so a
+// stale order book is visible instead of silent.
+async function renderSyncState() {
+  const el = $("paper-out-of-sync");
+  try {
+    const sync = await fetch("/api/broker/sync").then((r) => (r.ok ? r.json() : null));
+    if (!sync || (sync.in_sync && !sync.error)) {
+      el.classList.add("hidden");
+      return;
+    }
+    if (sync.drift && sync.drift.length) {
+      const parts = sync.drift.slice(0, 3).map((d) =>
+        `${esc(d.symbol || "order")} ${esc(d.side || "")}${d.notional != null ? ` $${Number(d.notional).toFixed(2)}` : ""}`);
+      el.innerHTML = `Out of sync with the paper broker: ${sync.drift.length} open order(s) this app did not place (${parts.join(", ")}${sync.drift.length > 3 ? ", …" : ""}).`;
+    } else {
+      el.textContent = "Broker sync check failed; order state may be stale.";
+    }
+    el.classList.remove("hidden");
+  } catch {
+    el.classList.add("hidden");
   }
 }
 

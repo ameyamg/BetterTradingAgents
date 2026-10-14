@@ -476,6 +476,30 @@ class BrokerStatus(BaseModel):
     max_order_usd: float = 0.0  # 0 = no cap recorded (unconfigured)
 
 
+class BrokerDrift(BaseModel):
+    """An order open at the broker that this app has no local row for."""
+
+    client_order_id: str = ""
+    symbol: str = ""
+    side: str = ""
+    notional: float | None = None
+    submitted_at: str = ""
+
+
+class BrokerSyncState(BaseModel):
+    """Result of the last broker reconciliation sweep (ROADMAP P2.3).
+
+    checked_at=None means no sweep has run yet; error set means the sweep
+    could not reach the broker, so in_sync is unknown rather than true.
+    """
+
+    checked_at: float | None = None
+    in_sync: bool = True
+    reconciled: int = 0
+    drift: list[BrokerDrift] = []
+    error: str | None = None
+
+
 class BrokerAccount(BaseModel):
     """Mapped Alpaca paper account snapshot."""
 

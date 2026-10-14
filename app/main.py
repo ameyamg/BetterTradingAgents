@@ -24,6 +24,7 @@ from app.models import (
     BrokerOrderRequest,
     BrokerPosition,
     BrokerStatus,
+    BrokerSyncState,
     CalibrationTrackRecord,
     AutomationStatus,
     AutomationUpdateRequest,
@@ -107,6 +108,10 @@ async def startup() -> None:
     # Keychain/DB overrides must land on the settings object before the
     # automation loop and anything else first reads them.
     await asyncio.to_thread(settings_store.apply_overrides)
+    # P2.3: settle rows a crashed process left pending/unknown, and start the
+    # interval reconciliation sweep, BEFORE anything can submit new orders.
+    await broker.reconcile_startup()
+    broker.start_sync_loop()
     automation.start()
     mode = "mock (no LLM_API_KEY)" if not settings.llm_configured else settings.llm_model
     logger.info("[startup] BetterTradingAgents ready | llm=%s", mode)
@@ -485,6 +490,15 @@ def _broker_http_error(exc: Exception) -> HTTPException:
 @app.get("/api/broker/status", response_model=BrokerStatus)
 async def broker_status():
     return await broker.status()
+
+
+@app.get("/api/broker/sync", response_model=BrokerSyncState)
+async def broker_sync_state():
+    """Reconciliation state for the portfolio page's out-of-sync banner
+    (P2.3); a stored result staler than a minute is refreshed once, so
+    polling tabs reach the broker at most once a minute."""
+    state = await broker.sync_state(max_age_s=60.0)
+    return BrokerSyncState(**state)
 
 
 @app.get("/api/broker/account", response_model=BrokerAccount)
