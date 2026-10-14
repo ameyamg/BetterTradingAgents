@@ -15,6 +15,7 @@ import asyncio
 import json
 import logging
 from math import isfinite
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from time import monotonic
@@ -71,19 +72,63 @@ class MarketData:
     news: list[dict] = field(default_factory=list)
     social: list[dict] = field(default_factory=list)  # Reddit / StockTwits posts
     sources: dict = field(default_factory=dict)  # prices / fundamentals / news / social
+    hosted_forecast: dict | None = None  # resolved by get_stock_data's forecast hook
     as_of: str = ""
 
 
-async def get_stock_data(ticker: str) -> MarketData:
-    """Fetch everything the agents need for one ticker, concurrently."""
+# Hard timeouts (seconds) so one slow provider cannot stall the data phase
+# (ROADMAP P2.14: the pre-agent phase once reached 245s). yfinance has no
+# native timeout; calls run in threads, so wait_for abandons rather than
+# interrupts a hung one - the run moves on either way.
+OLOSTEP_TIMEOUT = 20
+YF_HISTORY_TIMEOUT = 60
+YF_SLOW_TIMEOUT = 20
+
+
+async def _with_timeout(coro, timeout: int, fallback):
+    """Await with a cap; on timeout (or any failure) return the fallback."""
+    try:
+        return await asyncio.wait_for(coro, timeout)
+    except Exception as exc:  # noqa: BLE001 - a slow provider must degrade
+        logger.warning("provider call exceeded %ss: %s", timeout, exc)
+        return fallback
+
+
+async def get_stock_data(
+    ticker: str,
+    forecast: Callable[[list[float]], Awaitable[dict | None]] | None = None,
+) -> MarketData:
+    """Fetch everything the agents need for one ticker, concurrently.
+
+    `forecast` (the hosted chain, called with the closes) starts the moment
+    the price history lands instead of after the whole gather (ROADMAP P2.14);
+    its result rides back on MarketData.hosted_forecast. The Olostep news
+    fallback starts as soon as Finnhub comes back empty, overlapping the
+    remaining fetches instead of trailing the gather by up to its full
+    timeout. Same providers, same preference order - only the scheduling
+    changed.
+    """
     yf_task = asyncio.create_task(_yf_all(ticker))
     fundamentals_task = asyncio.create_task(_finnhub_fundamentals(ticker))
     news_task = asyncio.create_task(_finnhub_news(ticker))
     social_task = asyncio.create_task(_olostep_social(ticker))
+    forecast_task: asyncio.Task | None = None
+    olostep_task: asyncio.Task | None = None
 
-    yf_data, finnhub_fund, finnhub_news, social = await asyncio.gather(
-        yf_task, fundamentals_task, news_task, social_task
-    )
+    yf_data = await yf_task
+    if forecast is not None and yf_data["closes"]:
+        forecast_task = asyncio.create_task(forecast(yf_data["closes"]))
+    if yf_data["price"] is None:
+        raise ValueError(f"no price data found for '{ticker}'")
+
+    finnhub_news = await news_task
+    finnhub_fund = await fundamentals_task
+    company_name = finnhub_fund.pop("company_name", "") or yf_data["name"] or ticker
+    if not finnhub_news:
+        olostep_task = asyncio.create_task(_olostep_news(ticker, company_name))
+    social = await social_task
+    olostep_news = await olostep_task if olostep_task else []
+    hosted = await forecast_task if forecast_task else None
 
     data = MarketData(ticker=ticker)
     data.closes = yf_data["closes"]
@@ -91,12 +136,8 @@ async def get_stock_data(ticker: str) -> MarketData:
     data.lows = yf_data["lows"]
     data.volumes = yf_data["volumes"]
     data.price = yf_data["price"]
-    if data.price is None:
-        raise ValueError(f"no price data found for '{ticker}'")
 
-    data.company_name = (
-        finnhub_fund.pop("company_name", "") or yf_data["name"] or ticker
-    )
+    data.company_name = company_name
 
     # Fundamentals: Finnhub wins on conflicts, yfinance fills the gaps.
     merged = {**yf_data["fundamentals"], **finnhub_fund}
@@ -108,15 +149,14 @@ async def get_stock_data(ticker: str) -> MarketData:
     # News: Finnhub -> Olostep search/scrape -> yfinance.
     if finnhub_news:
         data.news, data.sources["news"] = finnhub_news, "finnhub"
+    elif olostep_news:
+        data.news, data.sources["news"] = olostep_news, "olostep"
     else:
-        olostep_news = await _olostep_news(ticker, data.company_name)
-        if olostep_news:
-            data.news, data.sources["news"] = olostep_news, "olostep"
-        else:
-            data.news, data.sources["news"] = yf_data["news"], "yfinance"
+        data.news, data.sources["news"] = yf_data["news"], "yfinance"
     # Social sentiment posts (ROADMAP 3.1): Olostep site-restricted search.
     data.social, data.sources["social"] = social, ("olostep" if social else "none")
     data.sources["prices"] = "yfinance"
+    data.hosted_forecast = hosted
     data.as_of = datetime.now(timezone.utc).isoformat()
 
     logger.info(
@@ -265,6 +305,18 @@ async def get_tsfm_forecast(
         return None
 
 
+async def get_hosted_forecast(
+    closes: list[float], horizon: int = 5
+) -> dict | None:
+    """The hosted forecast chain: TimeGPT while its quota allows, then TSFM.ai
+    (Chronos-2). None sends the caller to its local fallback; any provider
+    failure degrades silently to the next link."""
+    hosted = await get_timegpt_forecast(closes, horizon)
+    if hosted is None:
+        hosted = await get_tsfm_forecast(closes, horizon)
+    return hosted
+
+
 def _normalize_timegpt_forecast(
     payload: dict, current_price: float, horizon: int
 ) -> dict | None:
@@ -340,11 +392,24 @@ def _normalize_tsfm_forecast(
 
 
 async def _yf_all(ticker: str) -> dict:
-    """History, profile and news fetched concurrently (3 round-trips -> 1 wait)."""
+    """History, profile and news fetched concurrently (3 round-trips -> 1 wait).
+
+    History is required (its timeout aborts the ticker); profile and news are
+    best-effort, each with a hard cap so a rate-limited .info call cannot hang
+    the data phase (ROADMAP P2.14).
+    """
     history, profile, news = await asyncio.gather(
-        asyncio.to_thread(_yf_history, ticker),
-        asyncio.to_thread(_yf_profile, ticker),
-        asyncio.to_thread(_yf_news, ticker),
+        _with_timeout(
+            asyncio.to_thread(_yf_history, ticker),
+            YF_HISTORY_TIMEOUT,
+            {"closes": [], "highs": [], "lows": [], "volumes": [], "price": None},
+        ),
+        _with_timeout(
+            asyncio.to_thread(_yf_profile, ticker),
+            YF_SLOW_TIMEOUT,
+            {"name": ticker, "fundamentals": {}},
+        ),
+        _with_timeout(asyncio.to_thread(_yf_news, ticker), YF_SLOW_TIMEOUT, {"news": []}),
     )
     return {**history, **profile, **news}
 
@@ -557,7 +622,7 @@ async def _olostep_news(ticker: str, company_name: str) -> list[dict]:
     headers = {"Authorization": f"Bearer {settings.olostep_api_key}"}
     query = f"{company_name or ticker} {ticker} stock news latest".strip()
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
+        async with httpx.AsyncClient(timeout=OLOSTEP_TIMEOUT) as client:
             response = await client.post(
                 OLOSTEP_SEARCH,
                 headers=headers,
@@ -619,7 +684,7 @@ async def _olostep_social(ticker: str) -> list[dict]:
         return []
     query = f"{ticker} stock (site:reddit.com OR site:stocktwits.com)"
     try:
-        async with httpx.AsyncClient(timeout=45) as client:
+        async with httpx.AsyncClient(timeout=OLOSTEP_TIMEOUT) as client:
             response = await client.post(
                 OLOSTEP_SEARCH,
                 headers={"Authorization": f"Bearer {settings.olostep_api_key}"},
@@ -707,13 +772,22 @@ def _index_stats(symbol: str) -> dict:
     }
 
 
+_MARKET_CONTEXT_TTL = 300.0  # daily bars: a 5-minute-old regime read is fresh
+_market_context_cache: tuple[float, dict] | None = None  # (fetched_at, context)
+
+
 async def get_market_context() -> dict:
     """Compact regime snapshot: S&P 500, Nasdaq, VIX, 10-year yield.
 
-    Best-effort per index: one failing must not sink the rest. ^TNX quotes
-    the 10-year yield times ten, so it is scaled back to a percent (its
-    percentage changes are scale-invariant).
+    Cached per module with a short TTL so a multi-ticker run downloads the
+    indices once instead of once per ticker (ROADMAP P2.14). Best-effort per
+    index: one failing must not sink the rest. ^TNX quotes the 10-year yield
+    times ten, so it is scaled back to a percent (its percentage changes are
+    scale-invariant).
     """
+    global _market_context_cache
+    if _market_context_cache and monotonic() - _market_context_cache[0] < _MARKET_CONTEXT_TTL:
+        return _market_context_cache[1]
 
     async def one(key: str, symbol: str) -> tuple[str, dict]:
         try:
@@ -728,4 +802,6 @@ async def get_market_context() -> dict:
             key: (round(value / 10, 3) if isinstance(value, float) else value)
             for key, value in pairs["rates_10y"].items()
         }
-    return {key: stats for key, stats in pairs.items() if stats}
+    context = {key: stats for key, stats in pairs.items() if stats}
+    _market_context_cache = (monotonic(), context)
+    return context

@@ -41,10 +41,9 @@ from app.outlook import DEFAULT_OUTLOOK, horizon_days as outlook_horizon, user_c
 from app.tools.indicators import compute_indicators, historical_forecast
 from app.tools.market_data import (
     MarketData,
+    get_hosted_forecast,
     get_market_context,
     get_stock_data,
-    get_timegpt_forecast,
-    get_tsfm_forecast,
 )
 
 logger = logging.getLogger("analysis")
@@ -673,6 +672,16 @@ def _source_references(market: Any) -> list[SourceReference]:
     return references
 
 
+# Soft per-stage budgets (seconds) behind the ROADMAP P2.14 slow-stage
+# warning; researchers share the fallback budget.
+STAGE_BUDGETS_S = {"data_fetch": 60, "debate": 240, "judge": 120, "manager": 240}
+RESEARCH_STAGE_BUDGET_S = 180
+
+
+def over_budget(stage: str, seconds: float) -> bool:
+    return seconds > STAGE_BUDGETS_S.get(stage, RESEARCH_STAGE_BUDGET_S)
+
+
 async def analyze_ticker(
     ticker: str,
     emit: Emit,
@@ -716,14 +725,49 @@ async def analyze_ticker(
     # report the user may be trying not to leave behind.
     logger.info("[analysis] Starting %s", "an incognito ticker" if incognito else ticker)
 
+    # Per-stage wall times (ROADMAP P2.14): recorded for every stage, surfaced
+    # beside the run's cost estimate, flagged in the log when over budget.
+    # Researchers overlap, so the sum can exceed the run's wall time.
+    stage_times: dict[str, float] = {}
+
+    async def timed(stage: str, coro):
+        begin = time.perf_counter()
+        try:
+            return await coro
+        finally:
+            stage_times[stage] = round(time.perf_counter() - begin, 1)
+
+    # Depth profile, horizon, and exclusions are pure config - resolved before
+    # the data fetch so the forecast hook can be handed to get_stock_data.
+    prof = depth_profile(depth)
+    # The run's horizon drives the forecast, the risk band, and grading.
+    run_horizon = outlook_horizon(outlook)
+    # Backtests can drop researchers whose data has no point-in-time source
+    # (P1.2: fundamentals); the exclusion applies to prompts, events, and the
+    # data-quality coverage report alike.
+    research: tuple[str, ...] = tuple(
+        key for key in prof["research"] if key not in exclude_analysts
+    )
+    # The hosted forecast only needs the closes, so it starts the moment the
+    # price history lands inside get_stock_data instead of after the whole
+    # gather (ROADMAP P2.14).
+    forecast_hook = (
+        (lambda closes: get_hosted_forecast(closes, run_horizon))
+        if "forecast" in research
+        else None
+    )
+
     if market_data is not None:
         market = market_data
+        stage_times["data_fetch"] = 0.0
         if market.price is None:
             await emit("ticker_failed", {"ticker": ticker, "error": "no price in snapshot"})
             return StockAnalysis(ticker=ticker, error="no price in snapshot")
     else:
         try:
-            market = await get_stock_data(ticker)
+            market = await timed(
+                "data_fetch", get_stock_data(ticker, forecast=forecast_hook)
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning("[analysis] %s aborted: market data failed: %s", ticker, exc)
             await emit("ticker_failed", {"ticker": ticker, "error": str(exc)[:200]})
@@ -734,15 +778,6 @@ async def analyze_ticker(
     indicators = compute_indicators(
         market.closes, market.highs, market.lows, market.volumes
     )
-    prof = depth_profile(depth)
-    # The run's horizon drives the forecast, the risk band, and grading.
-    run_horizon = outlook_horizon(outlook)
-    # Backtests can drop researchers whose data has no point-in-time source
-    # (P1.2: fundamentals); the exclusion applies to prompts, events, and the
-    # data-quality coverage report alike.
-    research: tuple[str, ...] = tuple(
-        key for key in prof["research"] if key not in exclude_analysts
-    )
     # Market-regime context for the Market Analyst: fetched once, only when
     # the profile asks for the agent, overlapping the forecast fetch below.
     indices_task = (
@@ -751,15 +786,15 @@ async def analyze_ticker(
         else None
     )
     local_forecast: dict | None = None
-    timegpt_forecast: dict | None = None
+    hosted_forecast = market.hosted_forecast
     if "forecast" in research:
         local_forecast = historical_forecast(market.closes, run_horizon)
-        # Hosted chain: TimeGPT while its quota allows, then TSFM.ai
-        # (Chronos-2), then the local trend model. Any failure falls through;
-        # the payload key keeps its historical name for saved-run parity.
-        hosted_forecast = await get_timegpt_forecast(market.closes, run_horizon)
-        if hosted_forecast is None:
-            hosted_forecast = await get_tsfm_forecast(market.closes, run_horizon)
+        if hosted_forecast is None and market_data is not None:
+            # Injected snapshot (backtest replay): no gather to overlap, so
+            # the hosted chain runs here on the replayed closes. Any failure
+            # falls through; the payload key keeps its historical name for
+            # saved-run parity.
+            hosted_forecast = await get_hosted_forecast(market.closes, run_horizon)
         if hosted_forecast:
             indicators.update(hosted_forecast)
             market.sources["forecast"] = (
@@ -890,7 +925,7 @@ async def analyze_ticker(
     research_data = dict(
         zip(
             research_keys,
-            await asyncio.gather(*(run_research(key) for key in research_keys)),
+            await asyncio.gather(*(timed(key, run_research(key)) for key in research_keys)),
         )
     )
     market_data_res = research_data.get("market")
@@ -932,14 +967,17 @@ async def analyze_ticker(
     # marks the debate SKIPPED via slot()).
     bull_data, bear_data = None, None
     if prof.get("debate", True):
-        bull_data, bear_data = await asyncio.gather(
-            _run_agent(
-                bull, ticker, emit, token_totals=token_totals, role_usage=role_usage,
-                live=live_context, payload=context,
-            ),
-            _run_agent(
-                bear, ticker, emit, token_totals=token_totals, role_usage=role_usage,
-                live=live_context, payload=context,
+        bull_data, bear_data = await timed(
+            "debate",
+            asyncio.gather(
+                _run_agent(
+                    bull, ticker, emit, token_totals=token_totals, role_usage=role_usage,
+                    live=live_context, payload=context,
+                ),
+                _run_agent(
+                    bear, ticker, emit, token_totals=token_totals, role_usage=role_usage,
+                    live=live_context, payload=context,
+                ),
             ),
         )
 
@@ -951,18 +989,21 @@ async def analyze_ticker(
     judge_data = None
     if prof.get("judge") and settings.debate_rounds >= 2:
         if bull_data and bear_data:
-            judge_data = await _run_agent(
-                judge,
-                ticker,
-                emit,
-                token_totals=token_totals,
-                role_usage=role_usage,
-                live=live_context,
-                payload={
-                    "research": context,
-                    "bull_round_1": bull_data,
-                    "bear_round_1": bear_data,
-                },
+            judge_data = await timed(
+                "judge",
+                _run_agent(
+                    judge,
+                    ticker,
+                    emit,
+                    token_totals=token_totals,
+                    role_usage=role_usage,
+                    live=live_context,
+                    payload={
+                        "research": context,
+                        "bull_round_1": bull_data,
+                        "bear_round_1": bear_data,
+                    },
+                ),
             )
         else:
             await emit(
@@ -1045,15 +1086,29 @@ async def analyze_ticker(
         "past_decisions": past_decisions_ctx,
         "cross_ticker_lessons": cross_lessons_ctx,
     }
-    mgr_data = await _run_agent(
-        manager,
-        ticker,
-        emit,
-        token_totals=token_totals,
-        role_usage=role_usage,
-        live=live_context,
-        payload=full_context,
+    mgr_data = await timed(
+        "manager",
+        _run_agent(
+            manager,
+            ticker,
+            emit,
+            token_totals=token_totals,
+            role_usage=role_usage,
+            live=live_context,
+            payload=full_context,
+        ),
     )
+
+    # ROADMAP P2.14: flag stages that blew their budget so "which stage was
+    # slow" is one log glance. No ticker in the line - incognito logs stay
+    # anonymous.
+    for stage, seconds in stage_times.items():
+        if over_budget(stage, seconds):
+            logger.warning(
+                "[analysis] stage over budget: %s took %.1fs",
+                stage,
+                seconds,
+            )
 
     if mgr_data:
         final = manager.to_manager_result(mgr_data, ticker)
@@ -1174,6 +1229,7 @@ async def analyze_ticker(
         bear=bear_r,
         judge=judge_r,
         duration_s=round(time.perf_counter() - started, 1),
+        stage_timings_s=stage_times,
         suggested_size_usd=size_usd,
         risk_flags=risk_flags,
         concentration=concentration,

@@ -216,6 +216,7 @@ class StockAnalysis(BaseModel):
     bear_rebuttal: AgentResult | None = None  # deprecated: runs before the judge
     judge: JudgeResult | None = None
     duration_s: float = 0.0
+    stage_timings_s: dict[str, float] = Field(default_factory=dict)  # per-stage wall times (P2.14)
     error: str | None = None
     suggested_size_usd: float | None = None
     risk_flags: list[str] = Field(default_factory=list)
