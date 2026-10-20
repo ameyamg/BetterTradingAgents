@@ -38,7 +38,7 @@ import app.discovery as discovery  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import RunStatus, StockAnalysis  # noqa: E402
-from app.runs import Run, store  # noqa: E402
+from app.runs import store  # noqa: E402
 
 FAKE_KEY = "PKCHECKKEY"
 FAKE_SECRET = "secret-check-value-must-never-leak"

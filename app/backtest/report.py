@@ -211,7 +211,7 @@ def _markdown(payload: dict) -> str:
     if payload["ungraded"]:
         lines += [
             "",
-            f"Ungraded (window not finished): "
+            "Ungraded (window not finished): "
             + ", ".join(f"{d['ticker']}@{d['date']}" for d in payload["ungraded"]),
         ]
     lines += [

@@ -10,7 +10,6 @@ pin the page structure, the print stylesheet, and the JSON export payload.
 import asyncio
 import os
 from pathlib import Path
-import re
 import tempfile
 
 # Isolated DB before app.config is imported.

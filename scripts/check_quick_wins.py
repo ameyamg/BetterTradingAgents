@@ -1,6 +1,5 @@
 """One-off sanity checks for the quick-win changes. Run: uv run python scripts/check_quick_wins.py"""
 
-import asyncio
 import os
 import random
 import tempfile
@@ -163,7 +162,7 @@ finally:
 print("discovery cache OK: one-hour hit and expiry refresh")
 
 # ---- debate judge mock (deterministic, offline) ------------------------------
-from app.agents import bear, bull, forecast as forecast_agent, judge  # noqa: E402
+from app.agents import forecast as forecast_agent, judge  # noqa: E402
 
 _verdict = judge.mock("NVDA", {"bull_round_1": {"score": 0.8, "summary": "bull"}, "bear_round_1": {"score": 0.7, "summary": "bear"}})
 assert 0.0 <= _verdict["bull_strength"] <= 1.0 and 0.0 <= _verdict["bear_strength"] <= 1.0

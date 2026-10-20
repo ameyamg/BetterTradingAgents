@@ -2,7 +2,7 @@
 
 import json
 
-from app.agents import clamp_conf, first_sentence, pick_signal, clip
+from app.agents import clamp_conf, pick_signal, clip
 from app.models import AgentResult, AnalystResult
 
 NAME = "technical"
