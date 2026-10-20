@@ -114,7 +114,7 @@ async def checks() -> None:
         print("portfolio page paper view OK")
 
         # ---- decision-brief data the client renders is in the run payload ----
-        detail = await client.get(f"/api/runs/{run_a.run_id}")
+        detail = await client.get(f"/api/runs/{run_a.run_id}", headers={"X-Client-ID": OWNER})
         assert detail.status_code == 200, detail.text
         body = detail.json()
         assert body["run_id"] == run_a.run_id

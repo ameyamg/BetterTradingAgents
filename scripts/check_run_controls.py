@@ -84,7 +84,8 @@ async def checks() -> None:
                 ["AAA", "BBB", "CCC"], client_id="device_run_controls"
             )
             await asyncio.sleep(0.5)
-            cancelled = await client.post(f"/api/runs/{run.run_id}/cancel")
+            cancelled = await client.post(f"/api/runs/{run.run_id}/cancel",
+                headers={"X-Client-ID": "device_run_controls"})
             assert cancelled.status_code == 200
             assert cancelled.json()["status"] == "cancelled"
             assert run.status == "cancelled"  # terminal before the pipeline settles
@@ -103,13 +104,15 @@ async def checks() -> None:
             assert not runs.store.analysis_inflight and not runs.store.analysis_waiters
 
             # Repeated cancels are harmless no-ops reporting the same status.
-            repeat = await client.post(f"/api/runs/{run.run_id}/cancel")
+            repeat = await client.post(f"/api/runs/{run.run_id}/cancel",
+                 headers={"X-Client-ID": "device_run_controls"})
             assert repeat.status_code == 200 and repeat.json()["status"] == "cancelled"
             await asyncio.sleep(0.1)
             assert run.status == "cancelled"
 
             # Refresh and restart paths restore the same partial results.
-            detail = await client.get(f"/api/runs/{run.run_id}")
+            detail = await client.get(f"/api/runs/{run.run_id}",
+                headers={"X-Client-ID": "device_run_controls"})
             assert detail.status_code == 200 and detail.json()["status"] == "cancelled"
             assert set(detail.json()["results"]) == {"AAA"}
             persisted = await run_history.get(run.run_id)
@@ -149,7 +152,8 @@ async def checks() -> None:
             portfolio_delay["seconds"] = 30.0
             early = await runs.store.create(["AAA"], client_id="device_run_controls")
             await asyncio.sleep(0.2)
-            early_cancel = await client.post(f"/api/runs/{early.run_id}/cancel")
+            early_cancel = await client.post(f"/api/runs/{early.run_id}/cancel",
+                    headers={"X-Client-ID": "device_run_controls"})
             assert early_cancel.status_code == 200
             assert early_cancel.json()["status"] == "cancelled"
             await early.execution_task
@@ -160,6 +164,20 @@ async def checks() -> None:
                 e for e in early.events if e["type"] == "analysis_completed"
             ]
             assert len(early_terminal) == 1 and early_terminal[0]["status"] == "cancelled"
+
+            # ---- P2.11: run ownership on detail, cancel, and chat ----------
+            owned = await runs.store.create(["AAA"], client_id="device_run_controls")
+            await owned.execution_task
+            foreign = {"X-Client-ID": "someone_elses_tab"}
+            mine = {"X-Client-ID": "device_run_controls"}
+            assert (await client.get(f"/api/runs/{owned.run_id}", headers=foreign)).status_code == 404
+            assert (await client.post(f"/api/runs/{owned.run_id}/cancel", headers=foreign)).status_code == 404
+            chat_body = {"ticker": "AAA", "messages": [{"role": "user", "content": "why?"}]}
+            assert (await client.post(f"/api/runs/{owned.run_id}/chat", json=chat_body, headers=foreign)).status_code == 404
+            assert (await client.get(f"/api/runs/{owned.run_id}", headers=mine)).status_code == 200
+            assert (await client.get(f"/api/runs/{owned.run_id}")).status_code == 404, \
+                "a missing id is as foreign as a wrong one"
+            print("run ownership OK (foreign tabs get 404 on detail/cancel/chat)")
     finally:
         runs.analyze_ticker = original_analyze
         runs.fetch_portfolio_summary = original_portfolio

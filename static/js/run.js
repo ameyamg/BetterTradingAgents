@@ -47,7 +47,9 @@ export async function restoreSavedRun() {
   const runId = urlRun || storedRunId();
   if (!runId) return;
   try {
-    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
+    });
     if (response.status === 404) {
       clearSavedRun(runId);
       if (urlRun) showRestoreNotice("That analysis is no longer on this server; start a new run when ready.");
@@ -262,7 +264,9 @@ export function openStream(runId) {
 
 async function syncRunResults(runId) {
   try {
-    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
+    });
     if (!response.ok) return;
     const run = await response.json();
     hydrateResults(run.results || {}, false);
@@ -351,7 +355,10 @@ export async function cancelRun() {
   const button = $("cancel-btn");
   button.disabled = true;
   try {
-    const response = await fetch(`/api/runs/${encodeURIComponent(state.runId)}/cancel`, { method: "POST" });
+    const response = await fetch(`/api/runs/${encodeURIComponent(state.runId)}/cancel`, {
+      method: "POST",
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
+    });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.detail || `failed (${response.status})`);
     // The terminal SSE event may have landed while the request was in flight;

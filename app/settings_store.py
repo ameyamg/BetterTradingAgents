@@ -18,7 +18,7 @@ import sqlite3
 import time
 from typing import Any
 
-from app.config import settings
+from app.config import safe_base_url, settings
 
 logger = logging.getLogger("settings")
 
@@ -405,6 +405,15 @@ def save(values: dict[str, Any], clear_secrets: list[str]) -> None:
         if field["secret"]:
             secret_values[name] = str(coerced)
         else:
+            # P2.11: base URLs are validated where they enter; the API key
+            # would follow a plain-http remote URL straight off the machine.
+            if name.startswith("llm_base_url") and str(coerced).strip():
+                if not safe_base_url(str(coerced)):
+                    errors.append(
+                        f"{name} must be https (or http to a loopback host); "
+                        f"the LLM API key would follow it in cleartext"
+                    )
+                    continue
             clean[name] = coerced
     for name in clear_secrets:
         if FIELDS.get(name, {}).get("secret") is not True:

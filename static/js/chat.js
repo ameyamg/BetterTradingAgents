@@ -1,7 +1,8 @@
 /* Per-ticker follow-up chat with the portfolio manager. */
 
+import { CLIENT_ID_KEY } from "./constants.js";
 import { state } from "./state.js";
-import { $, escapeAttr, escapeHtml, showToast } from "./util.js";
+import { $, escapeAttr, escapeHtml, getClientId, showToast } from "./util.js";
 
 export function chatState(ticker) {
   if (!state.chats.has(ticker)) {
@@ -68,7 +69,10 @@ export async function sendChatMessage(ticker) {
   try {
     const response = await fetch(`/api/runs/${encodeURIComponent(state.runId)}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-ID": getClientId(CLIENT_ID_KEY),
+      },
       body: JSON.stringify({ ticker, messages: chat.messages.slice(-20) }),
     });
     const payload = await response.json().catch(() => ({}));

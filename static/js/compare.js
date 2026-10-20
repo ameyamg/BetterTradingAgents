@@ -115,7 +115,9 @@ async function loadSelection() {
   const runs = new Map();
   await Promise.all([...new Set(items.map((i) => i.runId))].map(async (runId) => {
     try {
-      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+        headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
+    });
       if (response.ok) runs.set(runId, await response.json());
     } catch (_) { /* missing run stays missing */ }
   }));

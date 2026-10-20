@@ -141,7 +141,7 @@ async def checks() -> None:
         assert rows["priced00001"]["cost_usd"] == 3.60
         assert rows["priced00001"]["cost_unknown"] is False
         assert rows["mixed000001"]["cost_unknown"] is True
-        detail = await client.get("/api/runs/priced00001")
+        detail = await client.get("/api/runs/priced00001", headers={"X-Client-ID": "device_cost_test"})
         assert detail.json()["results"]["NVDA"]["cost_estimate"]["by_role"]["manager"]["usd"] == 3.60
 
 

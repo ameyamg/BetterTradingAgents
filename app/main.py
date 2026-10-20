@@ -1,6 +1,7 @@
 """BetterTradingAgents - FastAPI application."""
 
 import asyncio
+import ipaddress
 import json
 import logging
 import re
@@ -61,6 +62,25 @@ def _origin_authority(origin: str) -> str:
     return urlparse(origin.lower()).netloc
 
 
+def _peer_is_remote(peer: str | None) -> bool:
+    """True only for a parseable non-loopback IP (P2.11).
+
+    Real sockets always present the peer as an IP string, so this is the one
+    check a client cannot spoof by writing headers. Non-IP peers (None, or
+    the synthetic names test harnesses use) cannot be judged and fall
+    through to the Host/Origin checks below.
+    """
+    if not peer:
+        return False
+    try:
+        address = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    if address.version == 6 and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return not address.is_loopback
+
+
 @app.middleware("http")
 async def local_only_guard(request, call_next):
     """Drive-by protection for a localhost app (settings hold real API keys).
@@ -68,10 +88,15 @@ async def local_only_guard(request, call_next):
     A malicious page in the user's browser can reach http://127.0.0.1:8000
     even though nothing is exposed to the network: DNS rebinding makes an
     attacker site resolve here, and cross-site form/fetch POSTs carry an
-    Origin header naming the attacker. So: the Host header must be loopback,
-    and any Origin must be this app's own origin. Same-origin fetches,
-    same-page navigation, and header-less curl are unaffected.
+    Origin header naming the attacker. So: the socket peer must be loopback
+    (unspoofable, and the real boundary while the server binds 127.0.0.1),
+    the Host header must be loopback, and any Origin must be this app's own
+    origin. Same-origin fetches, same-page navigation, and header-less curl
+    are unaffected.
     """
+    peer = request.client.host if request.client else None
+    if _peer_is_remote(peer):
+        return PlainTextResponse("forbidden: non-loopback client", status_code=403)
     host = (request.headers.get("host") or "").lower()
     if not host:
         return PlainTextResponse("forbidden: missing Host header", status_code=403)
@@ -367,8 +392,23 @@ async def clear_run_history(
     return ClearHistoryResponse(deleted=await store.clear_history(client_id))
 
 
+async def _require_run_owner(run_id: str, client_id: str | None) -> None:
+    """P2.11: one local tab must not read, cancel, or chat about another
+    tab's run. Foreign runs answer the same 404 as missing ones, so the
+    check never confirms a run's existence; ownerless runs (created before
+    ownership, or by clients that never sent an id) stay open - the local
+    guard already bounds who can reach the app at all."""
+    owner = await store.owner_of(run_id)
+    if owner and owner != (client_id or ""):
+        raise HTTPException(status_code=404, detail="run not found")
+
+
 @app.get("/api/runs/{run_id}", response_model=RunStatus)
-async def run_status(run_id: str):
+async def run_status(
+    run_id: str,
+    client_id: str | None = Header(default=None, alias="X-Client-ID"),
+):
+    await _require_run_owner(run_id, client_id)
     status = await store.get_status(run_id)
     if status is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -392,7 +432,10 @@ async def discard_run(run_id: str):
 
 
 @app.post("/api/runs/{run_id}/cancel", response_model=CancelRunResponse)
-async def cancel_run(run_id: str):
+async def cancel_run(
+    run_id: str,
+    client_id: str | None = Header(default=None, alias="X-Client-ID"),
+):
     """Cancel a running analysis, preserving finished ticker results.
 
     Repeated requests are harmless and return the run's current status; a
@@ -400,6 +443,7 @@ async def cancel_run(run_id: str):
     pipeline from advancing but cannot revoke an LLM request an external
     provider has already accepted.
     """
+    await _require_run_owner(run_id, client_id)
     status = await store.cancel(run_id)
     if status is None:
         raise HTTPException(status_code=404, detail="run not found")
@@ -447,11 +491,16 @@ def _sse(event: dict) -> str:
 
 
 @app.post("/api/runs/{run_id}/chat", response_model=ManagerChatResponse)
-async def manager_chat(run_id: str, request: ManagerChatRequest):
+async def manager_chat(
+    run_id: str,
+    request: ManagerChatRequest,
+    client_id: str | None = Header(default=None, alias="X-Client-ID"),
+):
     """Follow-up Q&A with the portfolio manager about one ticker of a run."""
     ticker = request.ticker.strip().upper()
     if not TICKER_RE.match(ticker):
         raise HTTPException(status_code=400, detail="invalid ticker symbol")
+    await _require_run_owner(run_id, client_id)
     status = await store.get_status(run_id)
     if status is None:
         raise HTTPException(status_code=404, detail="run not found")

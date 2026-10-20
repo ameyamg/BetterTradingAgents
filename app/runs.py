@@ -177,6 +177,14 @@ class RunStore:
         run = self.get(run_id)
         return run.to_status() if run is not None else await run_history.get(run_id)
 
+    async def owner_of(self, run_id: str) -> str | None:
+        """The owning client id, memory first then history; None when the
+        run is unknown or predates ownership (P2.11)."""
+        run = self.get(run_id)
+        if run is not None:
+            return run.client_id or None
+        return await run_history.owner_of(run_id)
+
     async def list_history(
         self, client_id: str, limit: int = 50
     ) -> list[RunHistoryItem]:

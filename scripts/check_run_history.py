@@ -95,7 +95,8 @@ async def checks() -> None:
         )
         assert private_listing.status_code == 200 and private_listing.json() == []
         assert (await client.get("/api/runs")).json() == []
-        detail = await client.get("/api/runs/completed001")
+        detail = await client.get("/api/runs/completed001",
+                                 headers={"X-Client-ID": "device_history_test"})
         assert detail.status_code == 200
         assert detail.json()["results"]["TSLA"]["company_name"] == "Tesla, Inc."
         page = await client.get("/history")
@@ -108,7 +109,8 @@ async def checks() -> None:
             "/api/runs", headers={"X-Client-ID": "device_history_test"}
         )
         assert [item["run_id"] for item in remaining.json()] == ["active000001"]
-        assert (await client.get("/api/runs/completed001")).status_code == 404
+        assert (await client.get("/api/runs/completed001",
+                                   headers={"X-Client-ID": "device_history_test"})).status_code == 404
 
     with sqlite3.connect(history_db) as connection:
         indexes = {
