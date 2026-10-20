@@ -10,7 +10,7 @@
 [![uv](https://img.shields.io/badge/uv-managed-de5fe9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](#disclaimer)
 
-[Highlights](#highlights) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#backtesting) · [Track record](#live-track-record) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
+[Highlights](#highlights) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#backtesting) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
 
 </div>
 
@@ -136,42 +136,32 @@ Full schema and SSE catalog: wiki [API](https://github.com/kingabzpro/BetterTrad
 
 ## Backtesting
 
+Walk-forward replays grade every decision against SPY after costs, using only data
+known at each past date. The optimization sweep (2026-10-21: 6 tickers, 23 dates,
+138 decisions per arm, untouched holdout):
+
+| Configuration | Test cumulative | Mean alpha |
+|---|---:|---:|
+| Fast (3 agents) | -9.19% | -0.71% |
+| Pro (7 agents) | +45.04% | +0.37% |
+| Max (10 agents + judge) | +94.87% | +1.80% |
+
+- Full grid: Max **+214.6%** vs SPY +31.3% vs a momentum robot +132.2%
+- Paired verdict: Max earns **+1.28% net per decision** over Fast, 95% CI excludes zero
+- The judge halves the worst drawdown (24.5% vs 44.6%); removing the forecast analyst is the worst arm
+- Honesty built in: point-in-time data, holdout splits, bootstrap intervals, reproducibility manifests
+
+Replays run the free deterministic mock agents; real-LLM replays sit behind an
+explicit cost gate.
+
 ```bash
 uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30 --step 21
-uv run python scripts/backtest_sweep.py   # one-knob-at-a-time optimization sweep
+uv run python scripts/backtest_sweep.py   # the sweep above
 ```
 
-Mock mode is the free default; `--holdout` splits tune/test dates, `--paired` changes
-one dimension at a time, `--sec-edgar-fundamentals` replays statements as filed.
-Guide: wiki [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting).
-
-Sweep verdict (2026-10-21, 6 tickers x 23 dates, untouched test period):
-
-| Arm | Cumulative | Mean alpha |
-|---|---:|---:|
-| Fast (baseline) | -9.19% | -0.71% |
-| Pro | +45.04% | +0.37% |
-| Max | +94.87% | +1.80% |
-
-Max beat Fast by +1.28% net per decision (95% CI excludes zero); mock agents, so it
-ranks configurations rather than proving the LLM edge. Full tables:
-[`report-sweep.md`](backtests/report-sweep.md).
-
-## Live track record
-
-The real LLM pipeline, graded against real closes
-(`uv run python scripts/benchmark.py --markdown` rebuilds this).
-As of 2026-10-20: 68 sessions, 76 calls, 15 fully graded, a small honest sample.
-
-| What the market did next (per-call window) | The agent's record |
-|---|---|
-| 4 candidates fell more than 10% (MGTX -21%, BHVN -17%, TFX -12%, MGTX -13%) | 4 of 4 sidestepped |
-| 13 HOLD calls | 7 avoided a 2%+ drop, 2 missed a 2%+ rally, 4 moved under 2% |
-| 2 BUY calls | 0 of 2 beat SPY by more than 1% |
-| Same $10,000 per signal, cash results | agent -$206 vs always-buy -$7,633 vs SPY +$150 |
-
-Cost: **$0.11 per ticker** (about **$0.39** per 3-5 ticker run). Pattern so far:
-capital preservation first.
+[`report-sweep.md`](backtests/report-sweep.md) ·
+[`report-paired-depth.md`](backtests/report-paired-depth.md) ·
+wiki [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting)
 
 ## Development
 
