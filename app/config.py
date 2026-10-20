@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -10,6 +11,21 @@ os.environ.setdefault("CREWAI_TELEMETRY_OPT_OUT", "true")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+
+# P2.11: the LLM API key follows base_url to whatever host it names, so a
+# plain-http remote URL would hand the key to anyone on the path. Local
+# development endpoints (vLLM, Ollama, LiteLLM...) stay allowed.
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def safe_base_url(url: str) -> bool:
+    """True when base_url cannot leak the API key: https anywhere, or http
+    only to a loopback host. Anything else (including bare hostnames with
+    no scheme) is rejected wherever the value enters."""
+    parsed = urlparse(url.strip())
+    if parsed.scheme == "https":
+        return True
+    return parsed.scheme == "http" and (parsed.hostname or "") in LOOPBACK_HOSTS
 
 
 def _env(name: str, default: str = "") -> str:

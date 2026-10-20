@@ -235,7 +235,9 @@ function onListClick(event) {
 async function exportRunJson(runId, button) {
   button.disabled = true;
   try {
-    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      headers: { "X-Client-ID": getClientId(CLIENT_ID_KEY) },
+    });
     if (!response.ok) throw new Error(`failed (${response.status})`);
     const blob = new Blob([await response.text()], { type: "application/json" });
     downloadFile(`bta-run-${runId}.json`, blob);

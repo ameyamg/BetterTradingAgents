@@ -162,5 +162,58 @@ check("same-origin Origin accepted",
       client.get("/api/health", headers={"Origin": "http://127.0.0.1"}).status_code == 200)
 check("settings page served", client.get("/settings").status_code == 200)
 
+# ---- P2.11: the socket peer is the unspoofable boundary ----------------------
+
+import asyncio  # noqa: E402
+
+from fastapi.responses import PlainTextResponse  # noqa: E402
+from starlette.requests import Request  # noqa: E402
+
+from app.config import safe_base_url  # noqa: E402
+from app.main import local_only_guard  # noqa: E402
+
+
+def _guard_response(peer):
+    """Run the guard middleware on one fabricated request."""
+    scope = {
+        "type": "http", "http_version": "1.1", "method": "GET", "scheme": "http",
+        "path": "/api/health", "raw_path": b"/api/health", "query_string": b"",
+        "headers": [(b"host", b"127.0.0.1:8000")],
+        "client": (peer, 51000) if peer else None, "server": ("127.0.0.1", 8000),
+    }
+
+    async def call_next(request):
+        return PlainTextResponse("ok")
+
+    return asyncio.run(local_only_guard(Request(scope), call_next))
+
+
+check("remote socket peer rejected", _guard_response("192.168.1.5").status_code == 403)
+check("loopback socket peer accepted", _guard_response("127.0.0.1").status_code == 200)
+check("IPv6 loopback peer accepted", _guard_response("::1").status_code == 200)
+check("mapped-v6 loopback peer accepted", _guard_response("::ffff:127.0.0.1").status_code == 200)
+check("synthetic peer name falls through to header checks",
+      _guard_response("testclient").status_code == 200)
+check("missing peer falls through", _guard_response(None).status_code == 200)
+
+# ---- P2.11: base URLs the API key may follow ---------------------------------
+
+check("https base URL accepted", safe_base_url("https://api.openai.com/v1"))
+check("loopback http base URL accepted", safe_base_url("http://127.0.0.1:11434/v1"))
+check("loopback-hostname http accepted", safe_base_url("http://localhost:8000/v1"))
+check("IPv6 loopback http accepted", safe_base_url("http://[::1]:8080/v1"))
+check("remote http base URL rejected", not safe_base_url("http://evil.example/v1"))
+check("scheme-less base URL rejected", not safe_base_url("api.openai.com/v1"))
+
+rejected = client.post("/api/settings", json={"values": {"llm_base_url": "http://evil.example/v1"}})
+check("settings rejects a leaking base URL", rejected.status_code == 400)
+check("rejection explains the leak", "cleartext" in rejected.json().get("detail", ""))
+accepted = client.post(
+    "/api/settings", json={"values": {"llm_base_url_analysts": "http://127.0.0.1:11434/v1"}}
+)
+check("settings accepts a loopback role URL", accepted.status_code == 200)
+check("rejected URL was not applied", settings.llm_base_url != "http://evil.example/v1")
+client.post("/api/settings/reset")  # roll the accepted override back for the rest
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

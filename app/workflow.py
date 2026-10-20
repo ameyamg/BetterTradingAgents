@@ -27,7 +27,7 @@ from app.agents import (
     sentiment,
     technical,
 )
-from app.config import settings
+from app.config import safe_base_url, settings
 from app.depth import DEFAULT_DEPTH, depth_profile
 from app.models import (
     AgentResult,
@@ -118,6 +118,13 @@ def _build_llm(
     from crewai import LLM
 
     conf = settings.llm_for(role)
+    # P2.11: enforce at the client too, not only in Settings: a hand-edited
+    # .env must not quietly point the API key at a cleartext remote host.
+    if not safe_base_url(conf["base_url"]):
+        raise ValueError(
+            f"llm base_url for {role} is neither https nor loopback http: "
+            f"{conf['base_url']!r}; refusing to send the API key there"
+        )
     effort = reasoning_effort if reasoning_effort is not None else (
         settings.llm_reasoning_effort_manager if role == "manager" else ""
     ) or settings.llm_reasoning_effort

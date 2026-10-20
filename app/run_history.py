@@ -180,6 +180,19 @@ async def get(run_id: str) -> RunStatus | None:
     return await asyncio.to_thread(_get, run_id)
 
 
+def _owner(run_id: str) -> str | None:
+    """Just the owning client id, without decoding the run's payload."""
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT owner_id FROM analysis_runs WHERE run_id = ?", (run_id,)
+        ).fetchone()
+    return row["owner_id"] if row else None
+
+
+async def owner_of(run_id: str) -> str | None:
+    return await asyncio.to_thread(_owner, run_id)
+
+
 def _list(limit: int, owner_id: str) -> list[RunHistoryItem]:
     with _connect() as connection:
         rows = connection.execute(

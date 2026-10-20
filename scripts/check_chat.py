@@ -173,12 +173,17 @@ async def e2e():
     store.runs.pop(run.run_id)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        # P2.11: this persisted run has an owner, so the chat must identify.
         response = await client.post(f"/api/runs/{run.run_id}/chat", json={
             "ticker": "NVDA",
             "messages": [{"role": "user", "content": "still there?"}],
-        })
+        }, headers={"X-Client-ID": "chat_check"})
         assert response.status_code == 200 and response.json()["answer"]
-    print("history fallback OK: restored run stays chattable")
+        assert (await client.post(f"/api/runs/{run.run_id}/chat", json={
+            "ticker": "NVDA",
+            "messages": [{"role": "user", "content": "still there?"}],
+        }, headers={"X-Client-ID": "someone_else"})).status_code == 404
+    print("history fallback OK: restored run stays chattable for its owner only")
 
 
 asyncio.run(e2e())
