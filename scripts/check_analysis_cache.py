@@ -1,12 +1,21 @@
 """Offline check. Run: uv run python -m scripts.check_analysis_cache"""
 
 import asyncio
+import os
+import tempfile
+from pathlib import Path
 
-from app import runs
-from app.models import PortfolioSummary, StockAnalysis
+# Isolated DB: _analyze_one reads "what changed since last call" through
+# run_history, so the analysis_runs table must exist even on a clean machine
+# (CI) where no developer portfolio.db is around.
+os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "analysis_cache_test.db")
+
+from app import run_history, runs  # noqa: E402
+from app.models import PortfolioSummary, StockAnalysis  # noqa: E402
 
 
 async def main() -> None:
+    await run_history.init()
     calls = 0
     original_analyze = runs.analyze_ticker
 
