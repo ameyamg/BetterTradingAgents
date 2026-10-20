@@ -208,6 +208,14 @@ filed (a real point-in-time source), `--holdout` splits tune and untouched test 
 and `--paired` changes one dimension at a time. The full guide lives in the wiki's
 [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting) page.
 
+A six-arm mock-mode sweep (2026-10-21; 6 tickers, 23 dates, holdout split,
+`uv run python scripts/backtest_sweep.py`) found the full Max roster clearly ahead of
+the Fast baseline on the untouched test period: +94.87% vs -9.19% cumulative, a mean
++1.28% net per decision with a bootstrap interval excluding zero, and roughly half the
+baseline's max drawdown. Removing the forecast analyst was the worst arm. Tables and
+verdicts: [`backtests/report-sweep.md`](backtests/report-sweep.md) and
+[`backtests/report-paired-depth.md`](backtests/report-paired-depth.md).
+
 ## Live track record
 
 Every completed call is graded on its run's outlook horizon (next session for day trades,
@@ -249,26 +257,8 @@ module-by-module walkthrough in
 
 ## Roadmap
 
-The detailed plan lives in the wiki's
-[Roadmap](https://github.com/kingabzpro/BetterTradingAgents/wiki/Roadmap) page. Shipped: the
-decision brief with trust state, run controls, confidence calibration, portfolio
-concentration risk, an accuracy scorecard of past calls vs realized performance
-(`uv run python scripts/accuracy.py`), Alpaca paper trading with autopilot
-sessions, in-app settings with OS-keychain secret storage, browser notifications, the
-debate judge (one neutral cross-examination of the bull/bear cases replacing the old
-self-scored rebuttal round), the market-regime analyst with rebalanced depth tiers:
-Fast (3 agents, no debate), Pro (7), Max (10) - old "medium" and "expert" values keep
-working everywhere - point-in-time SEC EDGAR fundamentals for honest fundamental
-backtests, incognito mode, a three-part UI pass (a shared UI layer, a
-decision-first results experience, and real charts), and a reliability pass:
-broker reconciliation sweeps that settle crashed submissions and flag drift with an
-out-of-sync banner (P2.3), serialized order guards with a wall-clock deadline on every
-run (P2.8), and a scheduled settle pass that matures every due decision, even on
-tickers never analyzed again (P1.17).
-
-Next up: guided first-run onboarding (P2.7), deployment and operational hardening
-before any shared deployment (P2.2), regional benchmarks for non-US tickers (P1.16),
-and a CI gate that runs the offline checks on every push (P2.15).
+The plan, the shipped-item status, and the research anchors live in one place: the
+wiki's [Roadmap](https://github.com/kingabzpro/BetterTradingAgents/wiki/Roadmap) page.
 
 ## Disclaimer
 
