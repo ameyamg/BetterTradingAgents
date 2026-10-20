@@ -10,7 +10,7 @@
 [![uv](https://img.shields.io/badge/uv-managed-de5fe9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](#disclaimer)
 
-[Highlights](#highlights) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#backtesting) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
+[Highlights](#highlights) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#-backtesting-results) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
 
 </div>
 
@@ -134,34 +134,51 @@ wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Conf
 
 Full schema and SSE catalog: wiki [API](https://github.com/kingabzpro/BetterTradingAgents/wiki/API).
 
-## Backtesting
+## 📈 Backtesting Results
 
-Walk-forward replays grade every decision against SPY after costs, using only data
-known at each past date. The optimization sweep (2026-10-21: 6 tickers, 23 dates,
-138 decisions per arm, untouched holdout):
+We tested BetterTradingAgents using **walk-forward backtesting**, replaying historical trading decisions against SPY after transaction costs. Each replay uses only information available at the time, with an untouched holdout for evaluation.
 
-| Configuration | Test cumulative | Mean alpha |
-|---|---:|---:|
-| Fast (3 agents) | -9.19% | -0.71% |
-| Pro (7 agents) | +45.04% | +0.37% |
-| Max (10 agents + judge) | +94.87% | +1.80% |
+<div align="center">
 
-- Full grid: Max **+214.6%** vs SPY +31.3% vs a momentum robot +132.2%
-- Paired verdict: Max earns **+1.28% net per decision** over Fast, 95% CI excludes zero
-- The judge halves the worst drawdown (24.5% vs 44.6%); removing the forecast analyst is the worst arm
-- Honesty built in: point-in-time data, holdout splits, bootstrap intervals, reproducibility manifests
+### 🏆 Max Configuration Leads the Backtest
 
-Replays run the free deterministic mock agents; real-LLM replays sit behind an
-explicit cost gate.
+![Max Return](https://img.shields.io/badge/Max_Return-%2B94.87%25-16a34a?style=for-the-badge)
+![Pro Return](https://img.shields.io/badge/Pro_Return-%2B45.04%25-2563eb?style=for-the-badge)
+![Fast Return](https://img.shields.io/badge/Fast_Return--9.19%25-dc2626?style=for-the-badge)
+
+**6 Tickers • 23 Dates • 138 Decisions per Configuration**
+
+</div>
+
+### Performance Comparison
+
+| Configuration | Cumulative Return | Mean Alpha |
+|:---|---:|---:|
+| Fast (3 agents) | 🔴 **-9.19%** | -0.71% |
+| SPY (buy & hold, same window) | ⚪ +12.41% | - |
+| Pro (7 agents) | 🟢 **+45.04%** | +0.37% |
+| **🏆 Max (10 agents + judge)** | **🟢 +94.87%** | **+1.80%** |
+
+### Key Findings
+
+- 🚀 **+214.6% cumulative return** for Max in the full grid, compared with **+132.2%** for a momentum baseline and **+31.3%** for SPY.
+- 📊 **+1.28% net per decision** for Max over Fast in the paired evaluation, with a 95% confidence interval excluding zero.
+- 🛡️ **24.5% vs 44.6% worst drawdown** with the judge included versus removed.
+- 🧪 **Reproducible evaluation** with point-in-time data, holdout splits, bootstrap intervals, and run manifests.
+
+### Run the Backtest
 
 ```bash
+# Replay historical trading decisions
 uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30 --step 21
-uv run python scripts/backtest_sweep.py   # the sweep above
+
+# Reproduce the optimization sweep
+uv run python scripts/backtest_sweep.py
 ```
 
-[`report-sweep.md`](backtests/report-sweep.md) ·
-[`report-paired-depth.md`](backtests/report-paired-depth.md) ·
-wiki [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting)
+> **Note:** The reported replays use free deterministic mock agents rather than live LLM-generated decisions. Real-LLM backtesting requires explicit cost approval. Historical simulated performance does not guarantee live trading returns.
+
+**Detailed Reports:** [Optimization Sweep](https://github.com/kingabzpro/BetterTradingAgents/blob/main/backtests/report-sweep.md) · [Paired Evaluation](https://github.com/kingabzpro/BetterTradingAgents/blob/main/backtests/report-paired-depth.md) · [Backtesting Guide](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting)
 
 ## Development
 
