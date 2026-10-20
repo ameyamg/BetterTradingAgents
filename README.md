@@ -145,15 +145,23 @@ Mock mode is the free default; `--holdout` splits tune/test dates, `--paired` ch
 one dimension at a time, `--sec-edgar-fundamentals` replays statements as filed.
 Guide: wiki [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting).
 
-Sweep verdict (2026-10-21): the Max roster clearly beat Fast on untouched test dates
-(+1.28% net per decision, CI excludes zero): [`report-sweep.md`](backtests/report-sweep.md).
+Sweep verdict (2026-10-21, 6 tickers x 23 dates, untouched test period):
+
+| Arm | Cumulative | Mean alpha |
+|---|---:|---:|
+| Fast (baseline) | -9.19% | -0.71% |
+| Pro | +45.04% | +0.37% |
+| Max | +94.87% | +1.80% |
+
+Max beat Fast by +1.28% net per decision (95% CI excludes zero); mock agents, so it
+ranks configurations rather than proving the LLM edge. Full tables:
+[`report-sweep.md`](backtests/report-sweep.md).
 
 ## Live track record
 
-Every call is graded on its outlook horizon against real closes.
-`uv run python scripts/benchmark.py --markdown` rebuilds this scorecard.
-
-As of 2026-10-14: 66 sessions, 68 calls, 12 fully graded.
+The real LLM pipeline, graded against real closes
+(`uv run python scripts/benchmark.py --markdown` rebuilds this).
+As of 2026-10-14: 66 sessions, 68 calls, 12 fully graded, a small honest sample.
 
 | What the market did next (21-day window) | The agent's record |
 |---|---|
@@ -162,8 +170,8 @@ As of 2026-10-14: 66 sessions, 68 calls, 12 fully graded.
 | 2 BUY calls | 0 of 2 beat SPY by more than 1% |
 | Same $10,000 per signal, cash results | agent -$206 vs always-buy -$5,262 vs SPY +$339 |
 
-Cost: **$0.12 per ticker** (about **$0.39** per 3-5 ticker run). Early data, small
-sample: capital preservation first, BUY record is the weak spot.
+Cost: **$0.12 per ticker** (about **$0.39** per 3-5 ticker run). Pattern so far:
+capital preservation first.
 
 ## Development
 
