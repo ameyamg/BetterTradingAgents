@@ -8,7 +8,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![CrewAI](https://img.shields.io/badge/CrewAI-multi--agent-ff6b35)](https://www.crewai.com/)
 [![uv](https://img.shields.io/badge/uv-managed-de5fe9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](#license)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](#disclaimer)
 
 [Highlights](#highlights) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#backtesting) · [Track record](#live-track-record) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
 
@@ -16,23 +16,13 @@
 
 ---
 
-BetterTradingAgents is an improved and streamlined version of the TradingAgents concept, with a
-faster parallel workflow, live progress, explainable decisions, risk controls, and paper trading.
-
-Enter up to five stock tickers. Six specialized analysts read the market regime,
-technicals, fundamentals, news, social sentiment, and the 5-day price forecast in
-parallel; the depth tier picks the roster (Fast weighs the research directly, skipping
-the debate), bull and bear researchers argue their cases with a neutral judge
-cross-examining both at Max depth, and a risk-gated **BUY / HOLD / SELL** decision comes
-back with a suggested position size and the full reasoning trail. Every completed call
-is remembered and graded against what the market actually did, so the Portfolio Manager
-brings a track record to the next decision, not just fresh data.
-
-The design is research-backed: the multi-agent structure improves on the
-[TradingAgents framework](https://arxiv.org/abs/2412.20138), and the discovery screen's
-momentum score follows the published literature; the
-[wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki) carries the full
-reference list and how each finding shapes the roadmap.
+Six analysts research each ticker in parallel (market regime, technicals, fundamentals,
+news, sentiment, forecast), a bull/bear debate with a neutral judge sharpens the case,
+and a risk-gated **BUY / HOLD / SELL** call comes back with sizing and the full
+reasoning trail. Every call is later graded against what the market actually did.
+Paper trading only. Research base: the
+[TradingAgents framework](https://arxiv.org/abs/2412.20138); the
+[wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki) carries the details.
 
 ![BetterTradingAgents home screen](static/screenshots/home.png?v=99340e7)
 
@@ -40,20 +30,20 @@ reference list and how each finding shapes the roadmap.
 
 | | Feature | What it means |
 |:---:|---|---|
-| ⚡ | **Parallel by design** | Researchers, data fetches, and debate rounds run concurrently, and multiple tickers run side by side. |
-| 🌍 | **Market regime** | A dedicated analyst reads the S&P 500, Nasdaq, VIX and the 10-year yield, so every call knows the weather it trades in. |
-| ⚔️ | **Real debate** | Bull and bear argue their strongest cases, then a neutral judge cross-examines both against the research before the call. |
-| 🗣️ | **Social sentiment** | A sixth researcher reads Reddit and StockTwits chatter, and says so when the crowd is too thin to mean anything. |
-| ⚖️ | **Risk-gated decisions** | BUYs are volatility-scaled and capped against your paper account by per-ticker, invested, and cash-buffer limits; downgrades are flagged, never silent. |
-| 📜 | **Learns from its calls** | Every decision is graded on realized return and alpha vs SPY; the manager weighs those lessons on the next run. |
-| 💬 | **Chat with the manager** | Every finished ticker gets a follow-up chat grounded in that run's research. |
-| 🕶️ | **Incognito mode** | Test the full pipeline market-only: no paper-account access, no trading, and nothing saved - download the report or chat, close the tab, and the run is gone. |
-| 🧪 | **Walk-forward backtests** | Replay the pipeline at past dates with point-in-time data only, graded against SPY after costs. |
-| 🕘 | **Durable history** | Completed and interrupted analyses are saved in SQLite and reopenable from the Runs page. |
-| 📊 | **Real market data** | Finnhub, Olostep, and yfinance for fundamentals, news, and prices; Nixtla TimeGPT or TSFM.ai Chronos-2 optionally forecast, with the local trend model as the final fallback. |
-| 🧠 | **Model flexibility** | Any OpenAI-compatible LLM, split by role: cheap and fast for researchers, stronger for the final call. |
-| 🛡️ | **Autopilot with guard rails** | Scheduled paper-trading sessions through the same risk gate and broker caps as manual clicks. |
-| 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served directly by FastAPI. |
+| ⚡ | **Parallel by design** | Researchers, data fetches, and tickers run concurrently. |
+| 🌍 | **Market regime** | A dedicated analyst reads S&P 500, Nasdaq, VIX, and the 10-year yield. |
+| ⚔️ | **Real debate** | Bull vs bear, then a neutral judge cross-examines both at Max depth. |
+| 🗣️ | **Social sentiment** | Reads Reddit and StockTwits; flags thin crowds as noise. |
+| ⚖️ | **Risk-gated decisions** | Volatility-scaled sizing capped by per-ticker, invested, and cash limits. |
+| 📜 | **Learns from its calls** | Every decision graded on return and alpha vs SPY; lessons feed the next run. |
+| 💬 | **Chat with the manager** | Follow-up chat grounded in that run's research. |
+| 🕶️ | **Incognito mode** | Market-only run: no account, no saving; download the report and it is gone. |
+| 🧪 | **Walk-forward backtests** | Replay past dates with point-in-time data, graded vs SPY after costs. |
+| 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
+| 📊 | **Real market data** | Finnhub, Olostep, yfinance; TimeGPT or Chronos-2 forecasts, local fallback. |
+| 🧠 | **Model flexibility** | Any OpenAI-compatible LLM, split by role. |
+| 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps. |
+| 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served by FastAPI. |
 
 ## How it works
 
@@ -84,148 +74,86 @@ uv run setup   # interactive wizard: pick a provider, paste keys, done
 uv run app     # start the app on http://127.0.0.1:8000
 ```
 
-The wizard offers the common LLM providers as presets, hides your API key while typing,
-optionally tests it with a one-token request, and writes `.env`. Prefer configuring by hand?
-Copy [`.env.example`](.env.example) to `.env`; every setting is optional.
-
 > [!TIP]
-> No LLM key yet? Leave `LLM_API_KEY` empty. The complete workflow remains available in clearly
-> labeled rule-based mock mode using live market data. Everything can also be changed after
-> launch on the in-app [Settings page](http://127.0.0.1:8000/settings), no restart needed.
+> No LLM key yet? Leave `LLM_API_KEY` empty and the full workflow runs in clearly
+> labeled mock mode on live market data. Everything is editable later on the in-app
+> Settings page, no restart needed.
 
 ## Using the app
 
 | Screen | What it does |
 |---|---|
-| **Home** | Run an analysis for up to 5 tickers with your outlook (day / short / long term) and depth (Fast / Medium / Expert), or let **I Am Feeling Lucky** screen the market for research candidates. |
-| **History** | Every run is saved with a direct `?run=<id>` link; rerun or cancel from the live view. |
-| **Trades** | Your Alpaca paper account: equity curve, open positions, the order lifecycle this app placed, and per-order return vs SPY; a reconciliation sweep settles crashed submissions and an out-of-sync banner flags broker orders this app did not place. |
-| **Settings** | Every knob from `.env` editable in the app, applied live; API keys go to the OS keychain. The **Enable experimentation** switch (Analysis section) adds a tab with opt-in toggles for the retired Accuracy, Compare, and Watchlist pages. |
+| **Home** | Analyze up to 5 tickers with outlook and depth, or let **I Am Feeling Lucky** screen candidates. **Incognito** runs market-only and saves nothing. |
+| **History** | Every run saved with a direct `?run=<id>` link; rerun or cancel from the live view. |
+| **Trades** | Paper account: equity curve, positions, order lifecycle, return vs SPY, reconciliation drift banner, and the **Autopilot** card for scheduled sessions (notifications optional). |
+| **Settings** | Every knob editable live; keys go to the OS keychain. The experimentation switch adds opt-in retired pages. |
 
-Watch each agent move from waiting to running to complete, with a progress bar per ticker;
-if an agent fails, the manager still makes a call on the inputs that survived. The result
-card ends in a conversation: expand the decision brief (conclusion, change conditions, the
-bull-versus-bear debate, evidence, sources, and your track record) and chat with the manager
-about the call.
-
-Just want to try it without touching anything of yours? Flip **Incognito mode** on the Home
-screen first: the run sees only market data (no paper account, no past-call memory), cannot
-trade or save to watchlist/history, and exists only in your browser tab - **Download report**
-exports the whole thing as a self-contained HTML file, and closing the page forgets the run
-server-side. The manager chat still works, grounded in that run's research alone.
-
-With paper trading configured, the Trades page also carries the **Autopilot** card: enable it
-and a background loop runs full trading sessions on a schedule. Each session always re-checks
-every held position (sell-or-hold) and scans the market for fresh candidates, rotating away
-names it analyzed in the last few days (`AUTOMATION_CANDIDATE_COOLDOWN_DAYS`) so the shortlist
-does not repeat for weeks. It submits only the risk-gated trades it agrees with through the
-same guarded broker path as a manual click. Desktop notifications can tell you
-when a session finishes. Scheduled sessions only trade while the market is open; every order
-is simulated paper, never live.
-
-The full walkthrough, screen by screen, lives in the wiki's
-[Usage](https://github.com/kingabzpro/BetterTradingAgents/wiki/Usage) page.
+Screen-by-screen walkthrough with screenshots: wiki [Usage](https://github.com/kingabzpro/BetterTradingAgents/wiki/Usage).
 
 ## Configuration
 
-> [!TIP]
-> Everything is editable in the app: launch it and open
-> [Settings](http://127.0.0.1:8000/settings). `.env` values act as the default layer; values
-> saved in the app override them, apply immediately (no restart), and **Reset to .env
-> defaults** undoes them. Keys saved in the app go to your OS keychain, never into the
-> database; see [Security](#security).
-
-New here? The wiki's [Providers](https://github.com/kingabzpro/BetterTradingAgents/wiki/Providers)
-page has one-click sign-up links for every key the app can use, plus which ones are optional.
-
-The settings most people touch:
+Everything is editable in the app (Settings page); `.env` is the default layer. Key
+sign-up links and what is optional: wiki [Providers](https://github.com/kingabzpro/BetterTradingAgents/wiki/Providers).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API endpoint |
-| `LLM_API_KEY` | Not set | Enables the LLM agents; without it the app runs in mock mode |
-| `LLM_MODEL` | `gpt-5.6-luna` | Model used by every agent without a per-role override |
-| `FINNHUB_API_KEY` | Not set | Fundamentals and news; falls back to yfinance |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
+| `LLM_API_KEY` | Not set | Enables the LLM agents; without it, mock mode |
+| `LLM_MODEL` | `gpt-5.6-luna` | Model for every role without an override |
+| `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
 | `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
-| `NIXTLA_API_KEY` | Not set | 5-day forecast (TimeGPT); falls back to the local trend model |
-| `TSFM_API_KEY` | Not set | 5-day forecast (TSFM.ai Chronos-2), used when TimeGPT is unavailable |
+| `NIXTLA_API_KEY` | Not set | 5-day forecast (TimeGPT) |
+| `TSFM_API_KEY` | Not set | 5-day forecast (Chronos-2) when TimeGPT is down |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
-| `ALPACA_TRADING_ENABLED` | `0` | Kill switch: `1` allows order submissions |
-| `AUTOMATION_*` | see `.env.example` | Autopilot knobs: interval, candidates, candidate cooldown, confidence bar, outlook, depth, sells |
+| `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
+| `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar |
 
-Per-role model splits, cost overrides, risk caps, memory, and backtest settings are
-documented in the wiki's
-[Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Configuration) page;
-the defaults live in `app/config.py`.
+Everything else (per-role models, cost overrides, risk caps, memory, backtest knobs):
+wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Configuration).
 
 ## Security
 
-- Keys entered on the Settings page are stored in the OS credential vault via
-  [keyring](https://pypi.org/project/keyring/): Windows Credential Manager, macOS Keychain,
-  or the Linux Secret Service. They never touch the SQLite database, the API never returns a
-  secret value, and nothing secret is logged. Keychain keys do not travel with a copied
-  project folder; re-enter them on a new machine. Without an OS keychain, secrets fall back
-  to the local database unencrypted and the Settings page says so.
-- The server binds to `127.0.0.1` only; middleware additionally rejects non-loopback `Host`
-  headers (DNS rebinding) and cross-site `Origin` headers, so a malicious web page in your
-  browser cannot drive the local API.
-- Paper trading only: the Alpaca client is built with `paper=True` hardcoded, so no
-  configuration can reach live trading.
+- Keys live in the OS keychain ([keyring](https://pypi.org/project/keyring/)), never in the database or logs.
+- Binds to `127.0.0.1` only; rejects non-loopback `Host` and cross-site `Origin` headers.
+- Paper only: the Alpaca client hardcodes `paper=True`; no live-trading path exists.
 
 ## API
 
 | Method | Route | Purpose |
 |:---:|---|---|
-| `POST` | `/api/analyze` | Start an analysis run for one or more tickers |
-| `GET` | `/api/runs/{run_id}` | Read run status and complete results |
-| `GET` | `/api/runs/{run_id}/events` | Stream live progress over SSE |
-| `POST` | `/api/runs/{run_id}/chat` | Ask the portfolio manager follow-up questions |
-| `GET` | `/api/settings` | Settings page payload (secrets masked) |
-| `POST` | `/api/settings` | Save settings; applied immediately, secrets to the OS keychain |
-| `GET` | `/api/broker/account` | Read the Alpaca paper account |
-| `POST` | `/api/broker/orders` | Place one paper order (explicit `confirm`, server-side guards) |
-| `GET` | `/api/broker/sync` | Broker reconciliation state: drift (open orders this app did not place) for the out-of-sync banner |
-| `POST` | `/api/automation/run` | Fire one autopilot session now |
-| `GET` | `/api/health` | Check configuration and provider status |
+| `POST` | `/api/analyze` | Start an analysis run |
+| `GET` | `/api/runs/{run_id}` | Run status and results |
+| `GET` | `/api/runs/{run_id}/events` | Live progress over SSE |
+| `POST` | `/api/runs/{run_id}/chat` | Follow-up chat with the manager |
+| `GET/POST` | `/api/settings` | Read and save settings (secrets masked) |
+| `GET` | `/api/broker/account` | Paper account state |
+| `POST` | `/api/broker/orders` | Place one paper order (explicit `confirm`) |
+| `GET` | `/api/broker/sync` | Reconciliation and drift state |
+| `POST` | `/api/automation/run` | Fire one autopilot session |
+| `GET` | `/api/health` | Configuration and provider status |
 
-```bash
-curl -X POST http://localhost:8000/api/analyze -H "Content-Type: application/json" -d '{"tickers":["NVDA","AMD"]}'
-```
-
-The full endpoint list, the complete result schema, and the SSE event catalog live in the
-wiki's [API](https://github.com/kingabzpro/BetterTradingAgents/wiki/API) page.
+Full schema and SSE catalog: wiki [API](https://github.com/kingabzpro/BetterTradingAgents/wiki/API).
 
 ## Backtesting
 
-The walk-forward harness answers "is the pipeline better than buy-and-hold?":
-
 ```bash
 uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30 --step 21
+uv run python scripts/backtest_sweep.py   # one-knob-at-a-time optimization sweep
 ```
 
-Mock mode is the free default; `--sec-edgar-fundamentals` replays US statements as
-filed (a real point-in-time source), `--holdout` splits tune and untouched test dates,
-and `--paired` changes one dimension at a time. The full guide lives in the wiki's
-[Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting) page.
+Mock mode is the free default; `--holdout` splits tune/test dates, `--paired` changes
+one dimension at a time, `--sec-edgar-fundamentals` replays statements as filed.
+Guide: wiki [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting).
 
-A six-arm mock-mode sweep (2026-10-21; 6 tickers, 23 dates, holdout split,
-`uv run python scripts/backtest_sweep.py`) found the full Max roster clearly ahead of
-the Fast baseline on the untouched test period: +94.87% vs -9.19% cumulative, a mean
-+1.28% net per decision with a bootstrap interval excluding zero, and roughly half the
-baseline's max drawdown. Removing the forecast analyst was the worst arm. Tables and
-verdicts: [`backtests/report-sweep.md`](backtests/report-sweep.md) and
-[`backtests/report-paired-depth.md`](backtests/report-paired-depth.md).
+Sweep verdict (2026-10-21): the Max roster clearly beat Fast on untouched test dates
+(+1.28% net per decision, CI excludes zero): [`report-sweep.md`](backtests/report-sweep.md).
 
 ## Live track record
 
-Every completed call is graded on its run's outlook horizon (next session for day trades,
-five trading days for short term, about a month for long term) against real closes: its own
-return and alpha vs SPY. This scorecard is generated, not hand-written:
-`uv run python scripts/benchmark.py --markdown` rebuilds it from the local run history.
+Every call is graded on its outlook horizon against real closes.
+`uv run python scripts/benchmark.py --markdown` rebuilds this scorecard.
 
-As of 2026-10-14: 66 live sessions, 68 unique calls, 12 fully graded (46 still inside their
-21-day window; a scheduled settle pass now matures every due call even when its ticker
-is not analyzed again).
+As of 2026-10-14: 66 sessions, 68 calls, 12 fully graded.
 
 | What the market did next (21-day window) | The agent's record |
 |---|---|
@@ -234,31 +162,23 @@ is not analyzed again).
 | 2 BUY calls | 0 of 2 beat SPY by more than 1% |
 | Same $10,000 per signal, cash results | agent -$206 vs always-buy -$5,262 vs SPY +$339 |
 
-Cost per analysis, measured on the same history: **$0.12 per ticker**; a typical 3-5 ticker
-run lands near **$0.39** at provider list prices. Early data, stated plainly: one month of
-live use and 12 graded calls is a small sample. The pattern so far is capital preservation
-first; the BUY record is the weak spot, which is exactly what the risk gate's confidence
-bar guards.
+Cost: **$0.12 per ticker** (about **$0.39** per 3-5 ticker run). Early data, small
+sample: capital preservation first, BUY record is the weak spot.
 
 ## Development
 
 ```bash
 uv run test         # fast offline suite
-uv run test chat    # one specific group
 uv run test all     # every group, including the browser smoke test
-
-uv run python scripts/smoke_llm.py   # one-shot: does the configured LLM answer?
 ```
 
-Every check is a standalone script in `scripts/`; the full catalog lives in the wiki's
-[Testing](https://github.com/kingabzpro/BetterTradingAgents/wiki/Testing) page, and the
-module-by-module walkthrough in
-[Architecture](https://github.com/kingabzpro/BetterTradingAgents/wiki/Architecture).
+Check catalog: wiki [Testing](https://github.com/kingabzpro/BetterTradingAgents/wiki/Testing);
+module walkthrough: [Architecture](https://github.com/kingabzpro/BetterTradingAgents/wiki/Architecture).
 
 ## Roadmap
 
-The plan, the shipped-item status, and the research anchors live in one place: the
-wiki's [Roadmap](https://github.com/kingabzpro/BetterTradingAgents/wiki/Roadmap) page.
+The plan, shipped status, and research anchors live in the wiki's
+[Roadmap](https://github.com/kingabzpro/BetterTradingAgents/wiki/Roadmap) page.
 
 ## Disclaimer
 
@@ -266,6 +186,6 @@ wiki's [Roadmap](https://github.com/kingabzpro/BetterTradingAgents/wiki/Roadmap)
 > BetterTradingAgents is an educational project, not investment advice. The portfolio is simulated;
 > nothing in this project executes real trades.
 
-This project is an improved and streamlined implementation inspired by
+An improved and streamlined implementation inspired by
 [TradingAgents](https://github.com/TauricResearch/TradingAgents). Licensed under
 [MIT](LICENSE).
