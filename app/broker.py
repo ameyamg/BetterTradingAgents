@@ -32,7 +32,13 @@ from alpaca.trading.requests import (
 )
 
 from app.config import settings
-from app.models import BrokerAccount, BrokerOrder, BrokerPosition, BrokerStatus
+from app.models import (
+    BrokerAccount,
+    BrokerOrder,
+    BrokerPosition,
+    BrokerStatus,
+    EquityMark,
+)
 
 logger = logging.getLogger("broker")
 
@@ -165,7 +171,12 @@ async def clock() -> dict:
 
 
 async def account() -> BrokerAccount:
-    """Fresh paper-account snapshot (also the Test connection action)."""
+    """Fresh paper-account snapshot (also the Test connection action).
+
+    Every successful read ratchets the local equity high-water mark upward
+    (P2.3 drawdown brake baseline), best-effort: a mark write must never
+    fail the account read it rides on.
+    """
 
     def _fetch() -> BrokerAccount:
         raw = _client().get_account()
@@ -179,7 +190,84 @@ async def account() -> BrokerAccount:
             trading_blocked=bool(raw.trading_blocked),
         )
 
-    return await _call(_fetch)
+    snapshot = await _call(_fetch)
+    if snapshot.equity is not None:
+        try:
+            await asyncio.to_thread(_ratchet_high_water, snapshot.equity)
+        except Exception as exc:  # noqa: BLE001 - best-effort by contract
+            logger.warning("[broker] equity mark ratchet failed: %s", exc)
+    return snapshot
+
+
+def _ratchet_high_water(equity: float) -> None:
+    """Raise the stored high-water mark to `equity`; never lower it.
+
+    One statement so two concurrent account reads cannot interleave a
+    read-modify-write: the WHERE guards the update on the row itself.
+    """
+    with _connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO equity_hwm (id, high_water, marked_at, note)
+            VALUES (1, ?, datetime('now'), 'new equity high')
+            ON CONFLICT(id) DO UPDATE SET
+                high_water = excluded.high_water,
+                marked_at = excluded.marked_at,
+                note = excluded.note
+            WHERE equity_hwm.high_water IS NULL
+               OR excluded.high_water > equity_hwm.high_water
+            """,
+            (equity,),
+        )
+
+
+async def equity_mark() -> EquityMark:
+    """The stored high-water mark, high_water=None before any account read."""
+
+    def _read() -> EquityMark:
+        with _connect() as connection:
+            row = connection.execute(
+                "SELECT high_water, marked_at, note FROM equity_hwm WHERE id = 1"
+            ).fetchone()
+        return EquityMark(
+            high_water=row["high_water"] if row else None,
+            marked_at=(row["marked_at"] if row else "") or "",
+            note=(row["note"] if row else "") or "",
+        )
+
+    return await asyncio.to_thread(_read)
+
+
+async def reset_equity_mark(note: str = "") -> EquityMark:
+    """Re-baseline the mark to the account's current equity (P2.13).
+
+    For a deposit or withdrawal: equity that moved for non-market reasons
+    would otherwise read as drawdown (a withdrawal) or silently re-anchor
+    high (a deposit, which the ratchet handles anyway). The note records why
+    the baseline moved; the caller cannot set the mark to anything but the
+    live equity, so this can never be used to disable the brake outright.
+    """
+    if not settings.alpaca_configured:
+        raise BrokerNotConfigured("paper trading is not configured")
+    snapshot = await account()
+    if snapshot.equity is None:
+        raise BrokerRuleError("paper account returned no equity to baseline against")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    def _write() -> EquityMark:
+        with _connect() as connection:
+            connection.execute(
+                """
+                UPDATE equity_hwm SET high_water = ?, marked_at = datetime('now'),
+                                      note = ? WHERE id = 1
+                """,
+                (snapshot.equity, f"baseline reset to equity {stamp}: {note or 'deposit or withdrawal'}"),
+            )
+        return EquityMark(
+            high_water=snapshot.equity, marked_at=stamp, note=note or "deposit or withdrawal"
+        )
+
+    return await asyncio.to_thread(_write)
 
 
 async def positions() -> list[BrokerPosition]:
@@ -251,6 +339,17 @@ async def init() -> None:
             connection.execute(
                 "INSERT OR IGNORE INTO broker_sync (id, checked_at) VALUES (1, NULL)"
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS equity_hwm (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    high_water REAL,
+                    marked_at TEXT,
+                    note TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            connection.execute("INSERT OR IGNORE INTO equity_hwm (id) VALUES (1)")
 
     await asyncio.to_thread(_ddl)
     if not settings.alpaca_configured:

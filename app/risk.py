@@ -8,10 +8,11 @@ Rules, not an LLM: free, testable, no hallucination surface (wiki Roadmap 1.2).
 - Exposure caps: a BUY is downgraded to HOLD when the sized position would
   breach the max single-position share of equity, the max invested share,
   or the minimum cash buffer.
-- Drawdown brake: a BUY halts when open positions' unrealized loss exceeds
-  MAX_DRAWDOWN_PCT of the cash-plus-cost basis behind them. Losses already
-  realized through SELLs are invisible to it; persist an equity high-water
-  mark when that ceiling bites. SELLs still pass: reducing exposure in a
+- Drawdown brake: a BUY halts when equity sits more than MAX_DRAWDOWN_PCT
+  below the locally persisted equity high-water mark, ratcheted upward on
+  every paper-account read (P2.13). The mark sees losses whether they are
+  still unrealized or were realized through SELLs, which the old
+  open-positions-only view missed. SELLs still pass: reducing exposure in a
   drawdown is recovery, not risk.
 - Position count cap: a BUY of a ticker not yet held halts at MAX_POSITIONS
   open positions; adding to a position already held is exempt.
@@ -284,16 +285,14 @@ def evaluate(
                     f"cash buffer would fall below "
                     f"{settings.min_cash_pct:.0%} of equity"
                 )
-            pnl = portfolio.total_pnl
-            if pnl is not None and pnl < 0 and equity - pnl > 0:
-                # ponytail: total_pnl is open positions' unrealized P&L only,
-                # so realized losses drop out of the brake once a SELL settles;
-                # persist an equity high-water mark when that ceiling bites
-                drawdown = -pnl / (equity - pnl)
+            mark = portfolio.equity_high_water
+            if mark is not None and mark > 0:
+                drawdown = 1.0 - equity / mark
                 if drawdown > settings.max_drawdown_pct + 1e-9:
                     reasons.append(
-                        f"open positions are {drawdown:.0%} underwater, past "
-                        f"the {settings.max_drawdown_pct:.0%} drawdown brake"
+                        f"equity sits {drawdown:.0%} below its ${mark:,.0f} "
+                        f"high-water mark, past the "
+                        f"{settings.max_drawdown_pct:.0%} drawdown brake"
                     )
             held_tickers = {p.ticker for p in portfolio.positions}
             if ticker not in held_tickers and len(held_tickers) >= settings.max_positions:

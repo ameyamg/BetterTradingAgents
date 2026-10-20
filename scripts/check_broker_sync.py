@@ -215,6 +215,44 @@ async def checks() -> None:
         assert exc.status_code == 503 and fatal.account_calls == 1
     print("classified retries OK (429+500 retried to success; 401 fails at once)")
 
+    # ---- equity high-water mark (P2.13): ratchets up, holds on dips ---------
+    def _account_with(equity: str):
+        raw = _raw_account()
+        raw.equity = equity
+        return raw
+
+    broker._client = lambda: _FakeClient(account=_raw_account())
+    await broker.account()  # the first successful read seeds the mark
+    mark = await broker.equity_mark()
+    assert mark.high_water == 100000.0 and mark.note == "new equity high", mark
+    broker._client = lambda: _FakeClient(account=_account_with("93000.00"))
+    await broker.account()  # a drawdown read must not lower the baseline
+    mark = await broker.equity_mark()
+    assert mark.high_water == 100000.0, mark
+    broker._client = lambda: _FakeClient(account=_account_with("110000.00"))
+    await broker.account()  # a new high ratchets the baseline up
+    mark = await broker.equity_mark()
+    assert mark.high_water == 110000.0 and mark.marked_at, mark
+
+    # a deposit or withdrawal re-baselines to the live equity, note recorded
+    mark = await broker.reset_equity_mark("paper account reset")
+    assert mark.high_water == 110000.0 and "paper account reset" in mark.note, mark
+    broker._client = lambda: _FakeClient(account=_account_with("90000.00"))
+    mark = await broker.reset_equity_mark()
+    assert mark.high_water == 90000.0 and "deposit or withdrawal" in mark.note, mark
+    stored = await broker.equity_mark()
+    assert stored.high_water == 90000.0, stored
+
+    # the GET endpoint is a pure local read: no broker call behind it
+    def _no_broker():
+        raise AssertionError("the mark endpoint must not reach the broker")
+    broker._client = _no_broker
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        body = (await client.get("/api/broker/equity-mark")).json()
+        assert body["high_water"] == 90000.0 and "deposit or withdrawal" in body["note"], body
+    print("equity high-water mark OK (seeds, holds on dips, ratchets, resets with a note)")
+
     _restore()
 
     # ---- the endpoint refreshes a stale stored state and serves the sweep --

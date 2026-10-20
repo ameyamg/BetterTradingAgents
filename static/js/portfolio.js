@@ -48,6 +48,7 @@ async function load() {
     $("paper-status").textContent = "";
     $("paper-killswitch").classList.toggle("hidden", Boolean(status.enabled));
     renderSummary(account, positions);
+    renderBaseline(account);
     renderPositions(positions);
     renderOrders(orders);
     renderEquityCurve();
@@ -94,6 +95,48 @@ function renderSummary(account, positions) {
   const pnl = $("pc-pnl");
   pnl.textContent = fmt(lastPnl);
   pnl.className = `sc-value ${lastPnl == null ? "" : lastPnl >= 0 ? "green" : "red"}`;
+}
+
+/* P2.13: the drawdown baseline card. The mark ratchets up on its own from
+   every account read; the reset exists for deposits/withdrawals, where equity
+   moved for non-market reasons and would otherwise read as drawdown (or the
+   reset note records the re-baseline). */
+async function renderBaseline(account) {
+  const valueEl = $("pc-hwm");
+  const resetBtn = $("pc-hwm-reset");
+  try {
+    const mark = await fetch("/api/broker/equity-mark").then((r) => (r.ok ? r.json() : null));
+    if (!mark || mark.high_water == null) {
+      valueEl.textContent = "n/a";
+      return;
+    }
+    valueEl.textContent = fmtUsd0(mark.high_water);
+    if (account.equity != null && account.equity < mark.high_water) {
+      const below = ((1 - account.equity / mark.high_water) * 100).toFixed(1);
+      valueEl.textContent += ` (-${below}%)`;
+      resetBtn.hidden = false;
+    }
+  } catch {
+    valueEl.textContent = "n/a";
+  }
+  resetBtn.addEventListener("click", async () => {
+    resetBtn.disabled = true;
+    try {
+      const mark = await fetch("/api/broker/equity-mark/reset", { method: "POST" })
+        .then((r) => (r.ok ? r.json() : null));
+      if (mark && mark.high_water != null) {
+        showToast(`Drawdown baseline reset to ${fmtUsd0(mark.high_water)}`);
+        resetBtn.hidden = true;
+        valueEl.textContent = fmtUsd0(mark.high_water);
+      } else {
+        showToast("Baseline reset failed");
+        resetBtn.disabled = false;
+      }
+    } catch {
+      showToast("Baseline reset failed");
+      resetBtn.disabled = false;
+    }
+  });
 }
 
 function renderPositions(positions) {
