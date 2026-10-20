@@ -161,16 +161,16 @@ ranks configurations rather than proving the LLM edge. Full tables:
 
 The real LLM pipeline, graded against real closes
 (`uv run python scripts/benchmark.py --markdown` rebuilds this).
-As of 2026-10-14: 66 sessions, 68 calls, 12 fully graded, a small honest sample.
+As of 2026-10-20: 68 sessions, 76 calls, 15 fully graded, a small honest sample.
 
-| What the market did next (21-day window) | The agent's record |
+| What the market did next (per-call window) | The agent's record |
 |---|---|
-| 3 candidates fell more than 10% (MGTX -21%, BHVN -17%, TFX -12%) | 3 of 3 sidestepped |
-| 10 HOLD calls | 4 avoided a 2%+ drop, 2 missed a 2%+ rally, 4 moved under 2% |
+| 4 candidates fell more than 10% (MGTX -21%, BHVN -17%, TFX -12%, MGTX -13%) | 4 of 4 sidestepped |
+| 13 HOLD calls | 7 avoided a 2%+ drop, 2 missed a 2%+ rally, 4 moved under 2% |
 | 2 BUY calls | 0 of 2 beat SPY by more than 1% |
-| Same $10,000 per signal, cash results | agent -$206 vs always-buy -$5,262 vs SPY +$339 |
+| Same $10,000 per signal, cash results | agent -$206 vs always-buy -$7,633 vs SPY +$150 |
 
-Cost: **$0.12 per ticker** (about **$0.39** per 3-5 ticker run). Pattern so far:
+Cost: **$0.11 per ticker** (about **$0.39** per 3-5 ticker run). Pattern so far:
 capital preservation first.
 
 ## Development
