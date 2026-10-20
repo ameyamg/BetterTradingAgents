@@ -348,6 +348,7 @@ class PortfolioSummary(BaseModel):
     positions_value: float | None = None
     total_equity: float | None = None
     total_pnl: float | None = None
+    equity_high_water: float | None = None  # local mark the drawdown brake reads
     realized_pnl: float = 0.0
     unpriced_count: int = 0  # open positions without a live price, excluded from totals
     positions: list[PortfolioPosition] = []
@@ -498,6 +499,19 @@ class BrokerSyncState(BaseModel):
     reconciled: int = 0
     drift: list[BrokerDrift] = []
     error: str | None = None
+
+
+class EquityMark(BaseModel):
+    """Local equity high-water mark behind the drawdown brake (ROADMAP P2.13).
+
+    high_water=None means no paper-account read has landed yet, so the brake
+    has no baseline to compare against. Alpaca cannot source this: realized_pl
+    is today-only and last_equity is yesterday's close.
+    """
+
+    high_water: float | None = None
+    marked_at: str = ""
+    note: str = ""
 
 
 class BrokerAccount(BaseModel):

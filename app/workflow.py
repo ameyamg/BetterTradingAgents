@@ -530,6 +530,9 @@ async def fetch_portfolio_summary() -> PortfolioSummary | None:
         if not (await broker.status()).configured:
             return None
         account, held = await asyncio.gather(broker.account(), broker.positions())
+        # Read after account(): the ratchet inside it has already folded this
+        # read's equity into the mark the drawdown brake compares against.
+        mark = await broker.equity_mark()
         positions = [
             PortfolioPosition(
                 id=index,
@@ -553,6 +556,7 @@ async def fetch_portfolio_summary() -> PortfolioSummary | None:
             positions_value=round(known_value, 2),
             total_equity=account.equity,
             total_pnl=round(sum(p.pnl or 0.0 for p in positions), 2),
+            equity_high_water=mark.high_water,
             unpriced_count=sum(1 for p in positions if p.value is None),
             positions=positions,
         )

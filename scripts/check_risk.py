@@ -64,20 +64,21 @@ d, c, s, f = risk.evaluate("BUY", 0.8, "AMD", (A(), A(), A()), 10.0, pf)
 assert d == "HOLD" and any("cash buffer" in flag for flag in f), f
 print("cash floor OK:", f)
 
-# ---- drawdown brake: open losses past MAX_DRAWDOWN_PCT halt BUYs, not SELLs -
-pf = flat_portfolio(equity=110_000.0, cash=70_000.0)
+# ---- drawdown brake: equity below its high-water mark halts BUYs, not SELLs -
+pf = flat_portfolio(equity=93_000.0, cash=53_000.0)
 pf.positions = [position("MSFT", 40_000.0)]
-pf.total_pnl = -20_000.0  # 20k open loss over 130k cash+cost -> 15.4% > 15% brake
+pf.equity_high_water = 110_000.0  # realized + unrealized losses both count: 15.5% below
 d, c, s, f_brake = risk.evaluate("BUY", 0.8, "AMD", (A(), A(), A()), 10.0, pf)
 assert d == "HOLD" and any("drawdown brake" in fl for fl in f_brake), f_brake
+assert any("high-water mark" in fl and "$110,000" in fl for fl in f_brake), f_brake
 d, c, s, f = risk.evaluate("SELL", 0.9, "MSFT", (A(), A(), A()), 10.0, pf)
 assert d == "SELL", f  # reducing exposure in a drawdown still passes
 print("drawdown brake OK:", f_brake)
 
-pf.total_pnl = -19_000.0  # down 14.7%: inside the brake, BUY proceeds
+pf.equity_high_water = 109_000.0  # down 14.7%: inside the brake, BUY proceeds
 d, c, s, f = risk.evaluate("BUY", 0.8, "AMD", (A(), A(), A()), 10.0, pf)
 assert d == "BUY" and f == [], f
-pf.total_pnl = None  # P&L unknown: the brake stays silent, other caps still run
+pf.equity_high_water = None  # no baseline yet: the brake stays silent, other caps still run
 d, c, s, f = risk.evaluate("BUY", 0.8, "AMD", (A(), A(), A()), 10.0, pf)
 assert d == "BUY" and f == [], f
 print("drawdown brake thresholds OK")

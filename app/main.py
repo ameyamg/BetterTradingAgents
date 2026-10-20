@@ -30,6 +30,7 @@ from app.models import (
     AutomationUpdateRequest,
     CancelRunResponse,
     ClearHistoryResponse,
+    EquityMark,
     ManagerChatRequest,
     ManagerChatResponse,
     RunHistoryItem,
@@ -506,6 +507,22 @@ async def broker_sync_state():
 async def broker_account():
     try:
         return await broker.account()
+    except (broker.BrokerNotConfigured, broker.BrokerRuleError) as exc:
+        raise _broker_http_error(exc) from exc
+
+
+@app.get("/api/broker/equity-mark", response_model=EquityMark)
+async def broker_equity_mark():
+    """The drawdown brake's baseline (P2.13); pure local read, no broker call."""
+    return await broker.equity_mark()
+
+
+@app.post("/api/broker/equity-mark/reset", response_model=EquityMark)
+async def broker_reset_equity_mark():
+    """Re-baseline the drawdown brake to current equity after a deposit or
+    withdrawal (P2.13); the note records why the baseline moved."""
+    try:
+        return await broker.reset_equity_mark()
     except (broker.BrokerNotConfigured, broker.BrokerRuleError) as exc:
         raise _broker_http_error(exc) from exc
 
