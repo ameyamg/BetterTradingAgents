@@ -267,8 +267,5 @@ wiki's [Roadmap](https://github.com/kingabzpro/BetterTradingAgents/wiki/Roadmap)
 > nothing in this project executes real trades.
 
 This project is an improved and streamlined implementation inspired by
-[TradingAgents](https://github.com/TauricResearch/TradingAgents).
-
-## License
-
-MIT
+[TradingAgents](https://github.com/TauricResearch/TradingAgents). Licensed under
+[MIT](LICENSE).
