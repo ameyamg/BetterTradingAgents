@@ -12,7 +12,7 @@ import asyncio
 import json
 import sqlite3
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from app.config import settings
 # The edges come from app.memory so the scorecard can never quote thresholds

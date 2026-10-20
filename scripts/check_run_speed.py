@@ -165,7 +165,7 @@ assert data.sources["news"] == "finnhub" and "olostep-news-start" not in events,
 print("fallback gate OK: no Olostep news call when Finnhub answers")
 
 # ---- per-stage timings on a full offline replay ------------------------------
-from app.workflow import STAGE_BUDGETS_S, analyze_ticker, over_budget  # noqa: E402
+from app.workflow import analyze_ticker, over_budget  # noqa: E402
 from app.tools.market_data import MarketData  # noqa: E402
 
 assert over_budget("data_fetch", 61) and not over_budget("data_fetch", 59)

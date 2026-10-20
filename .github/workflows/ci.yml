@@ -1,0 +1,41 @@
+# CI gate (ROADMAP P2.15): offline checks, lint, and the import smoke on
+# every push and pull request, so a broken check or an undeclared dependency
+# fails before merge instead of when a developer remembers `uv run test`.
+# The browser smoke is deliberately absent: it needs a system Chromium and
+# flakes often enough that a red/green gate would lie.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install dependencies from the lockfile
+        run: uv sync --frozen
+
+      - name: Lint (ruff)
+        run: uv run ruff check app scripts
+
+      - name: Offline check suite and import smoke
+        run: uv run test offline

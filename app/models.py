@@ -6,13 +6,12 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, field_validator
 
 from app.depth import DEFAULT_DEPTH, Depth, normalize_depth
+from app.outlook import DEFAULT_OUTLOOK, Outlook
 
 
 def _depth_value(value: object) -> object:
     """Normalize legacy depth keys ("medium"/"expert") on input; None passes through."""
     return None if value is None else normalize_depth(value)
-
-from app.outlook import DEFAULT_OUTLOOK, Outlook
 
 Decision = Literal["BUY", "HOLD", "SELL"]
 Signal = Literal["bullish", "bearish", "neutral", "positive", "negative", "unknown"]

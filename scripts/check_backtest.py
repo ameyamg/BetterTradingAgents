@@ -25,7 +25,6 @@ from app.backtest import data as bdata, run as brun  # noqa: E402
 from app.backtest.cache import SnapshotCache  # noqa: E402
 from app.backtest.data import (  # noqa: E402
     _apply_fundamentals_mode,
-    build_snapshot,
     published_on_or_before,
 )
 from app.backtest.experiments import parse_pair  # noqa: E402

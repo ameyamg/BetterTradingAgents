@@ -231,7 +231,7 @@ def _yf_ohlcv_between(ticker: str, start: str, end: str) -> dict:
     hist = hist.dropna(subset=["Close"])
     out["closes"] = [round(float(c), 4) for c in hist["Close"].tolist()]
     out["highs"] = [round(float(h), 4) for h in hist["High"].tolist()]
-    out["lows"] = [round(float(l), 4) for l in hist["Low"].tolist()]
+    out["lows"] = [round(float(lo), 4) for lo in hist["Low"].tolist()]
     out["volumes"] = [int(v) for v in hist["Volume"].tolist()]
     out["price"] = out["closes"][-1] if out["closes"] else None
     return out
@@ -421,7 +421,7 @@ def _yf_history(ticker: str) -> dict:
         hist = hist.dropna(subset=["Close"])
         out["closes"] = [round(float(c), 4) for c in hist["Close"].tolist()]
         out["highs"] = [round(float(h), 4) for h in hist["High"].tolist()]
-        out["lows"] = [round(float(l), 4) for l in hist["Low"].tolist()]
+        out["lows"] = [round(float(lo), 4) for lo in hist["Low"].tolist()]
         out["volumes"] = [int(v) for v in hist["Volume"].tolist()]
         if out["closes"]:
             out["price"] = out["closes"][-1]

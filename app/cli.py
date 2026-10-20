@@ -3,8 +3,9 @@
     uv run setup              interactive first-run wizard
     uv run app                start the FastAPI app with autoreload
     uv run test               offline check suite; add names for specific
-                              checks (uv run test chat) or "all" for every
-                              scripts/check_*.py
+                              checks (uv run test chat), "all" for every
+                              scripts/check_*.py, or "offline" for everything
+                              except the browser smoke
 """
 
 import os
@@ -49,6 +50,15 @@ def test() -> int:
     requested = sys.argv[1:]
     if requested in (["all"], ["--all"], ["-a"]):
         names = sorted(path.stem for path in (REPO_ROOT / "scripts").glob("check_*.py"))
+    elif requested in (["offline"], ["--offline"]):
+        # Everything except the browser smoke: that one needs a system
+        # Chromium and flakes often enough that a red/green gate would lie.
+        # This is the selection CI runs (ROADMAP P2.15).
+        names = sorted(
+            path.stem
+            for path in (REPO_ROOT / "scripts").glob("check_*.py")
+            if path.stem != "check_browser_smoke"
+        )
     else:
         names = requested or list(FAST_CHECKS)
     env = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}

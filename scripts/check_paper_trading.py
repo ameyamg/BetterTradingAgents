@@ -385,7 +385,6 @@ async def checks() -> None:
     print("daily cap OK")
 
     # ---- rejected by Alpaca: the POST happens, the row settles, no position --
-    import sqlite3
 
     fake.submit_error = _api_error(422, 42210000, "market closed")
     submits_before = fake.submit_calls
