@@ -34,7 +34,7 @@ momentum score follows the published literature; the
 [wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki) carries the full
 reference list and how each finding shapes the roadmap.
 
-![BetterTradingAgents home screen](static/screenshots/home.png)
+![BetterTradingAgents home screen](static/screenshots/home.png?v=99340e7)
 
 ## Highlights
 
