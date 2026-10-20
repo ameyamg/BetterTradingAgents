@@ -3,8 +3,8 @@
 Both arms share the same date grid, the same snapshot cache, the same costs,
 and the same seed; only the requested dimension differs. The comparison is
 reported on the holdout (test) period when one is set, with a paired
-bootstrap interval over the per-(ticker, date) alpha differences. A winner is
-promoted only when both arms clear the minimum positioned sample and the
+bootstrap interval over the per-(ticker, date) net-return differences. A
+winner is promoted only when both arms clear the minimum sample and the
 interval excludes zero - otherwise the honest answer is "not distinguishable".
 
 CLI: uv run python -m app.backtest --paired depth=fast:medium ...
@@ -95,6 +95,9 @@ async def run_paired(
 
     cache: SnapshotCache = common.pop("cache", None) or SnapshotCache()
     out_dir: Path = common.pop("out_dir", None) or DEFAULT_OUT_DIR
+    # The CLI always forwards --name in the shared args; the arms name their
+    # own reports below, so the shared one must not collide.
+    common.pop("name", None)
     mode = common.get("mode", "mock")
     original_model = settings.llm_model
     original_rounds = settings.debate_rounds
@@ -135,19 +138,24 @@ async def run_paired(
     return left_result, right_result, report_path
 
 
-def _paired_alphas(
+def _paired_nets(
     left: BacktestResult, right: BacktestResult, holdout: str | None
 ) -> tuple[list[float], dict[tuple[str, str], float], dict[tuple[str, str], float]]:
-    """Alpha differences over (ticker, date) pairs both arms positioned.
+    """Net-return differences over (ticker, date) pairs both arms graded.
 
-    HOLD decisions and unmatched dates carry no alpha, so they drop out of a
-    paired comparison rather than fabricating a zero difference.
+    Net, not alpha: in long-only mode two arms positioned on the same day are
+    both BUYs with identical alpha, and positioning disagreements drop out of
+    the intersection, so matched alpha differences are zero by construction.
+    Net is defined for every decision (HOLD and long-only SELL score 0), so
+    the paired interval measures what each arm actually earned per shared
+    decision.
     """
+
     def collect(result: BacktestResult) -> dict[tuple[str, str], float]:
         return {
-            (o.ticker, o.date): o.alpha_pct
+            (o.ticker, o.date): o.net_pct
             for o in result.outcomes
-            if o.alpha_pct is not None and _in_holdout(o, holdout)
+            if _in_holdout(o, holdout)
         }
 
     left_map, right_map = collect(left), collect(right)
@@ -186,7 +194,7 @@ def _comparison_md(
     )
     left_stats = _arm_summary(left_result, holdout)
     right_stats = _arm_summary(right_result, holdout)
-    differences, left_map, right_map = _paired_alphas(
+    differences, left_map, right_map = _paired_nets(
         left_result, right_result, holdout
     )
     ci = bootstrap_mean_ci(differences, seed=left_result.config.get("seed", 7))
@@ -233,10 +241,10 @@ def _comparison_md(
         arm_row("A", left, left_stats),
         arm_row("B", right, right_stats),
         "",
-        "## Paired difference (A - B, matched by ticker and date)",
+        "## Paired difference (A - B, per-decision net, matched by ticker and date)",
         "",
-        f"- paired positioned decisions: {paired_n} "
-        f"(A alone positioned {len(left_map)}, B alone {len(right_map)})",
+        f"- paired graded decisions: {paired_n} "
+        f"(A alone graded {len(left_map)}, B alone {len(right_map)})",
         f"- mean difference: {_pct(sum(differences) / paired_n) if paired_n else '-'}",
         f"- 95% bootstrap CI over {BOOTSTRAP_REPS} resamples: "
         + ("-" if ci is None else f"[{_fmt(ci[0])}%, {_fmt(ci[1])}%]"),
