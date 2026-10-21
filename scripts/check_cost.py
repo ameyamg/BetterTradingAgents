@@ -28,6 +28,8 @@ from app.models import RunStatus, StockAnalysis  # noqa: E402
 assert cost.price_for("zai-org/GLM-5.3") == (1.40, 4.40)
 assert cost.price_for("glm-5.3-flash") == (0.15, 0.50)
 assert cost.price_for("openai/gpt-5.6-luna") == (0.20, 1.20)
+assert cost.price_for("gpt-6-luna") == (0.10, 0.50)
+assert cost.price_for("gpt-6-sol") == (2.00, 10.00)
 assert cost.price_for("GPT-4o-mini") == (0.15, 0.60)
 assert cost.price_for("gpt-4.1-mini") == (0.40, 1.60)
 assert cost.price_for("deepseek-ai/DeepSeek-V4.1-Flash") == (0.30, 1.20)
@@ -35,7 +37,7 @@ assert cost.price_for("openai/deepseek-ai/DeepSeek-V4.1-Flash") == (0.30, 1.20)
 assert cost.price_for("deepseek-flash") == (0.30, 1.20)
 assert cost.price_for("my-localhost-model") is None
 assert cost.normalize_model("zai-org/GLM-5.3-Flash") == cost.normalize_model("glm5.3-flash")
-print("price table OK: GLM-5.3/Flash, gpt-5.6-luna, gpt-4o-mini; unknown -> None")
+print("price table OK: GLM-5.3/Flash, gpt-6-luna/sol, gpt-4o-mini; unknown -> None")
 
 # ---- estimate math ---------------------------------------------------------------
 estimate = cost.estimate({
@@ -59,7 +61,7 @@ assert floor["unpriced_models"] == ["proxy/unknown-model"]  # raw configured nam
 assert floor["by_role"]["debate"]["usd"] is None
 
 assert cost.estimate({}) == {}
-assert cost.estimate({"manager": {"model": "gpt-5.6-luna", "prompt_tokens": 0, "completion_tokens": 0}}) == {}
+assert cost.estimate({"manager": {"model": "gpt-6-luna", "prompt_tokens": 0, "completion_tokens": 0}}) == {}
 
 override = cost.estimate(
     {"manager": {"model": "anything", "prompt_tokens": 1_000, "completion_tokens": 1_000}},

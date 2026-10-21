@@ -118,13 +118,13 @@ def banner() -> None:
 # --------------------------------------------------------------- presets --
 # Provider presets: default base URL + a good starter model. Every value is
 # editable at the prompt, so a regional endpoint or another model is one
-# keystroke away. Model names follow the provider docs checked 2026-09-10.
+# keystroke away. Model names follow the provider docs checked 2026-10-21.
 PROVIDERS = [
     {
         "key": "openai",
         "label": "OpenAI",
         "base_url": "https://api.openai.com/v1",
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
     },
     {
         "key": "zai",

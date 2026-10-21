@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "n",               # no uv sync
     ])
     values = env_dict(env_file)
-    assert values["LLM_API_KEY"] == "" and values["LLM_MODEL"] == "gpt-5.6-luna"
+    assert values["LLM_API_KEY"] == "" and values["LLM_MODEL"] == "gpt-6-luna"
     print("mock path OK: no key required, defaults intact")
 
     # ---- merge path: existing .env values survive a re-run ---------------------
