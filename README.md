@@ -95,18 +95,18 @@ Screen-by-screen walkthrough with screenshots: wiki [Usage](https://github.com/k
 Everything is editable in the app (Settings page); `.env` is the default layer. Key
 sign-up links and what is optional: wiki [Providers](https://github.com/kingabzpro/BetterTradingAgents/wiki/Providers).
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
-| `LLM_API_KEY` | Not set | Enables the LLM agents; without it, mock mode |
-| `LLM_MODEL` | `gpt-5.6-luna` | Model for every role without an override |
-| `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
-| `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
-| `NIXTLA_API_KEY` | Not set | 5-day forecast (TimeGPT) |
-| `TSFM_API_KEY` | Not set | 5-day forecast (Chronos-2) when TimeGPT is down |
-| `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
-| `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
-| `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar |
+| Variable | Default | Purpose | Example |
+|---|---|---|---|
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint | `https://openrouter.ai/api/v1` |
+| `LLM_API_KEY` | Not set | Enables the LLM agents; without it, mock mode | `sk-...`, `sk-or-v1-...` |
+| `LLM_MODEL` | `gpt-5.6-luna` | Model for every role without an override | `gpt-6-luna`, `anthropic/claude-haiku-5.5`, `deepseek-4.1-flash` |
+| `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) | 20-char token |
+| `OLOSTEP_API_KEY` | Not set | News search and social sentiment | `sk_...` |
+| `NIXTLA_API_KEY` | Not set | 5-day forecast (TimeGPT) | token from the Nixtla dashboard |
+| `TSFM_API_KEY` | Not set | 5-day forecast (Chronos-2) when TimeGPT is down | token from Account > API Keys |
+| `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading | 20-char key ID + 40-char secret |
+| `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions | - |
+| `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar | - |
 
 Everything else (per-role models, cost overrides, risk caps, memory, backtest knobs):
 wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Configuration).
