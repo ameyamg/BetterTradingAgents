@@ -38,7 +38,7 @@ class Settings:
     # LLM (any OpenAI-compatible endpoint: OpenAI, OpenRouter, DeepSeek, Qwen, GLM, vLLM...)
     llm_base_url: str = _env("LLM_BASE_URL", "https://api.openai.com/v1")
     llm_api_key: str = _env("LLM_API_KEY")
-    llm_model: str = _env("LLM_MODEL", "gpt-5.6-luna")
+    llm_model: str = _env("LLM_MODEL", "gpt-6-luna")
     llm_temperature: float = float(_env("LLM_TEMPERATURE", "0.2"))
     llm_timeout_seconds: float = float(_env("LLM_TIMEOUT_SECONDS", "90"))
     # Optional provider-specific reasoning effort (e.g. "none"/"low" for GLM).

@@ -18,13 +18,15 @@ the other entries were checked 2026-09-10 against provider pricing pages:
 - Z.ai GLM-5.3: $1.40 / $4.40 (unchanged from GLM-5.2)
 - Z.ai GLM-5.3-Flash: $0.15 / $0.50 base list (a promotion halves it; the
   list price is the honest default)
+- OpenAI gpt-6-luna: $0.10 / $0.50 (released 2026-09-22; checked 2026-10-21)
+- OpenAI gpt-6-sol: $2.00 / $10.00 (released 2026-09-22; checked 2026-10-21)
 - OpenAI gpt-5.6-luna: $0.20 / $1.20 (since 2026-07-30)
 - OpenAI gpt-5.6-terra / gpt-5.6-sol: $2.00 / $12.00 and $5.00 / $30.00
 - OpenAI gpt-4o-mini / gpt-4o: $0.15 / $0.60 and $2.50 / $10.00
 - OpenAI gpt-4.1-mini / gpt-4.1: $0.40 / $1.60 and $2.00 / $8.00
 """
 
-PRICES_AS_OF = "2026-10-03"
+PRICES_AS_OF = "2026-10-21"
 
 # Normalized model name -> (input USD per 1M tokens, output USD per 1M tokens).
 # Keys go through normalize_model(): lowercase, part after the last "/",
@@ -35,6 +37,8 @@ MODEL_PRICES: dict[str, tuple[float, float]] = {
     "deepseekflash": (0.30, 1.20),
     "glm53": (1.40, 4.40),
     "glm53flash": (0.15, 0.50),
+    "gpt6luna": (0.10, 0.50),
+    "gpt6sol": (2.00, 10.00),
     "gpt56luna": (0.20, 1.20),
     "gpt56terra": (2.00, 12.00),
     "gpt56sol": (5.00, 30.00),
