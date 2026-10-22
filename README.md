@@ -41,7 +41,7 @@ Paper trading only. Research base: the
 | 🧪 | **Walk-forward backtests** | Replay past dates with point-in-time data, graded vs SPY after costs. |
 | 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
 | 📊 | **Real market data** | Finnhub, Olostep, yfinance; TimeGPT or Chronos-2 forecasts, local fallback. |
-| 🧠 | **Model flexibility** | Any OpenAI-compatible LLM, split by role. |
+| 🧠 | **Model flexibility** | Any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama), per role or per agent, with automatic fallback when a provider rejects an output format. |
 | 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps. |
 | 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served by FastAPI. |
 
@@ -97,7 +97,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LLM_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible endpoint |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible endpoint: OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama... |
 | `LLM_API_KEY` | Not set | Enables the LLM agents; without it, mock mode |
 | `LLM_MODEL` | `gpt-6-luna` | Model for every role without an override |
 | `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
