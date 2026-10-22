@@ -79,6 +79,7 @@ async def fake_analyze(ticker: str, emit, run_id: str = "", **_kwargs) -> StockA
         company_name="Smoke Test Inc",
         price=100.0,
         decision="BUY",
+        manager_decision="BUY",  # a successful run always carries the manager's call
         confidence=0.62,
         summary="Smoke-test decision.",
         suggested_size_usd=5000.0,
