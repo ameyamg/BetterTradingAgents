@@ -90,7 +90,7 @@ const NAV = [
 
 const BLURBS = {
   llm: "The OpenAI-compatible endpoint every agent calls.",
-  llm_roles: "Put a cheap fast model on the researchers and a stronger one where judgment matters.",
+  llm_roles: "Per-role overrides set a model for a whole role; per-agent sections below override one agent. Everything empty = the global LLM for all.",
   providers: "Optional market-data sources; each falls back gracefully without a key.",
   analysis: "How much research one analysis runs.",
   risk: "Guard rails applied to every BUY, as shares of equity.",
@@ -244,7 +244,8 @@ function renderPanels() {
     .filter(groupVisible)
     .map((group) => {
       const body = group.key === "llm_roles"
-        ? roleCards(group.fields)
+        ? roleCards(group.fields.filter((field) => !field.section))
+          + sectionedFields(group.fields.filter((field) => field.section))
         : `${group.key === "autopilot" ? autopilotRow() : ""}${sectionedFields(group.fields)}`;
       const blurb = BLURBS[group.key] ? `<span class="muted">${esc(BLURBS[group.key])}</span>` : "";
       return `<section class="card panel hidden" id="panel-${esc(group.key)}" aria-labelledby="tab-${esc(group.key)}">

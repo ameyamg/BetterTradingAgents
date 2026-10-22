@@ -28,6 +28,26 @@ def safe_base_url(url: str) -> bool:
     return parsed.scheme == "http" and (parsed.hostname or "") in LOOPBACK_HOSTS
 
 
+# Which role each agent runs as - the single source for the workflow's LLM
+# keying and for the agent -> role -> global LLM config resolution below.
+# Agents with their own settings fields (the six researchers + judge) can
+# override their role; bull/bear ride the debate role.
+AGENT_ROLES = {
+    "market": "analysts",
+    "technical": "analysts",
+    "fundamental": "analysts",
+    "news": "analysts",
+    "sentiment": "analysts",
+    "forecast": "analysts",
+    "bull": "debate",
+    "bear": "debate",
+    "judge": "debate",
+    "manager": "manager",
+}
+# Agents that carry per-agent llm_* settings fields.
+AGENT_LLM_KEYS = ("market", "technical", "fundamental", "news", "sentiment", "forecast", "judge")
+
+
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
@@ -57,6 +77,29 @@ class Settings:
     llm_model_debate: str = _env("LLM_MODEL_DEBATE")
     llm_base_url_debate: str = _env("LLM_BASE_URL_DEBATE")
     llm_api_key_debate: str = _env("LLM_API_KEY_DEBATE")
+    # Per-agent overrides (same three knobs per agent name); resolution is
+    # agent -> role -> global, so a lone global LLM_* still covers everyone.
+    llm_model_market: str = _env("LLM_MODEL_MARKET")
+    llm_base_url_market: str = _env("LLM_BASE_URL_MARKET")
+    llm_api_key_market: str = _env("LLM_API_KEY_MARKET")
+    llm_model_technical: str = _env("LLM_MODEL_TECHNICAL")
+    llm_base_url_technical: str = _env("LLM_BASE_URL_TECHNICAL")
+    llm_api_key_technical: str = _env("LLM_API_KEY_TECHNICAL")
+    llm_model_fundamental: str = _env("LLM_MODEL_FUNDAMENTAL")
+    llm_base_url_fundamental: str = _env("LLM_BASE_URL_FUNDAMENTAL")
+    llm_api_key_fundamental: str = _env("LLM_API_KEY_FUNDAMENTAL")
+    llm_model_news: str = _env("LLM_MODEL_NEWS")
+    llm_base_url_news: str = _env("LLM_BASE_URL_NEWS")
+    llm_api_key_news: str = _env("LLM_API_KEY_NEWS")
+    llm_model_sentiment: str = _env("LLM_MODEL_SENTIMENT")
+    llm_base_url_sentiment: str = _env("LLM_BASE_URL_SENTIMENT")
+    llm_api_key_sentiment: str = _env("LLM_API_KEY_SENTIMENT")
+    llm_model_forecast: str = _env("LLM_MODEL_FORECAST")
+    llm_base_url_forecast: str = _env("LLM_BASE_URL_FORECAST")
+    llm_api_key_forecast: str = _env("LLM_API_KEY_FORECAST")
+    llm_model_judge: str = _env("LLM_MODEL_JUDGE")
+    llm_base_url_judge: str = _env("LLM_BASE_URL_JUDGE")
+    llm_api_key_judge: str = _env("LLM_API_KEY_JUDGE")
     # Cost estimate overrides (app/cost.py): USD per 1M input/output tokens
     # applied to every role regardless of model - for custom or proxied
     # pricing. 0 = use the built-in list-price table (app/cost.py).
@@ -219,14 +262,34 @@ class Settings:
     def alpaca_configured(self) -> bool:
         return bool(self.alpaca_api_key_id and self.alpaca_api_secret_key)
 
-    def llm_for(self, role: str) -> dict:
-        """Resolved {model, base_url, api_key} for one role
-        (manager / analysts / debate); per-role overrides fall back to LLM_*."""
+    def llm_for(self, key: str) -> dict:
+        """Resolved {model, base_url, api_key} for an agent name or a role
+        (manager / analysts / debate); per-agent overrides beat the role
+        override, which falls back to the global LLM_* values."""
+        role = AGENT_ROLES.get(key, key)
+
+        def pick(suffix: str) -> str:
+            return (
+                getattr(self, f"llm_{suffix}_{key}", "")
+                or getattr(self, f"llm_{suffix}_{role}", "")
+                or getattr(self, f"llm_{suffix}")
+            )
+
         return {
-            "model": getattr(self, f"llm_model_{role}", "") or self.llm_model,
-            "base_url": getattr(self, f"llm_base_url_{role}", "") or self.llm_base_url,
-            "api_key": getattr(self, f"llm_api_key_{role}", "") or self.llm_api_key,
+            "model": pick("model"),
+            "base_url": pick("base_url"),
+            "api_key": pick("api_key"),
         }
+
+    def llm_key_for(self, agent: str) -> str:
+        """LLM cache key for one agent: the agent's own name when it
+        overrides its role's endpoint config, else the role (agents without
+        an override share the role's LLM object)."""
+        overridden = any(
+            getattr(self, f"llm_{suffix}_{agent}", "")
+            for suffix in ("model", "base_url", "api_key")
+        )
+        return agent if overridden else AGENT_ROLES.get(agent, agent)
 
 
 settings = Settings()
