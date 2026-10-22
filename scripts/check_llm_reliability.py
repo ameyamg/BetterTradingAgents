@@ -61,6 +61,47 @@ assert workflow._classify_failure(RuntimeError("response_format is not supported
 assert workflow._classify_failure(RuntimeError("connection reset by peer")) == "other"
 print("failure classification OK")
 
+# ---- provider compatibility: tasks must not force crewai's json_schema ----
+# output_pydantic makes crewai replace our json_object with a strict
+# json_schema request (via the parse API); providers like api.deepseek.com
+# reject that with a 400 on every call.
+from app.agents import (  # noqa: E402
+    bear,
+    bull,
+    forecast,
+    fundamental,
+    judge,
+    manager,
+    news,
+    sentiment,
+    technical,
+)
+from app.agents import market as market_agent  # noqa: E402
+
+_llm = workflow.get_llm("analysts")
+_AGENT_TASKS = (
+    (market_agent, {}), (technical, {}), (fundamental, {}), (news, {"items": []}),
+    (sentiment, {"items": []}), (forecast, {}), (bull, {}), (bear, {}),
+    (judge, {"research": {}, "bull_round_1": {}, "bear_round_1": {}}), (manager, {}),
+)
+for mod, payload in _AGENT_TASKS:
+    task = mod.build_task(mod.build_agent(_llm), "NVDA", payload)
+    assert getattr(task, "output_pydantic", None) is None, mod.NAME
+print("task builders OK: no output_pydantic, JSON mode stays json_object")
+
+# ---- a total agent wipeout fails the run instead of a fake HOLD -----------
+from app.models import AgentResult, StockAnalysis  # noqa: E402
+from app.runs import _no_usable_output  # noqa: E402
+
+assert _no_usable_output(StockAnalysis(ticker="X"))  # every agent dead
+assert _no_usable_output(StockAnalysis(ticker="X", error="boom"))  # ticker crashed
+assert not _no_usable_output(StockAnalysis(ticker="X", manager_decision="HOLD"))
+assert not _no_usable_output(StockAnalysis(
+    ticker="X",
+    technical=AgentResult(agent="technical", signal="neutral", confidence=0.5),
+))
+print("run-failure rule OK: all-agents-dead marks the run failed")
+
 # ---- stubbed crews for the retry paths -----------------------------------------
 
 

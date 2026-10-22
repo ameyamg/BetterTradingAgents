@@ -144,7 +144,8 @@ async def fake_analyze(ticker: str, emit, **kwargs) -> StockAnalysis:
     await asyncio.sleep(0.05)
     analysis = StockAnalysis(
         ticker=ticker, company_name="Test Corp", price=100.0,
-        decision="HOLD", confidence=0.5, summary="Balanced evidence.",
+        decision="HOLD", manager_decision="HOLD", confidence=0.5,
+        summary="Balanced evidence.",
     )
     await emit(
         "ticker_completed",

@@ -3,7 +3,7 @@
 import json
 
 from app.agents import clamp_conf, clip
-from app.models import AgentResult, DebateResult
+from app.models import AgentResult
 
 NAME = "bull"
 DISPLAY = "Bull Researcher"
@@ -46,7 +46,6 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
                 "A JSON object with keys: score (0.0-1.0), summary (max 3 sentences)."
             ),
             agent=agent,
-            output_pydantic=DebateResult,
         )
 
     return Task(
@@ -61,7 +60,6 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
 {{"score": <number 0.0-1.0 = how strong the bull case is>, "summary": "<at most 3 sentences>"}}""",
         expected_output="A JSON object with keys: score (0.0-1.0), summary (max 3 sentences).",
         agent=agent,
-        output_pydantic=DebateResult,
     )
 
 

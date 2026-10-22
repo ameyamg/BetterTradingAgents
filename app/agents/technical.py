@@ -3,7 +3,7 @@
 import json
 
 from app.agents import clamp_conf, pick_signal, clip
-from app.models import AgentResult, AnalystResult
+from app.models import AgentResult
 
 NAME = "technical"
 DISPLAY = "Technical Analyst"
@@ -43,7 +43,6 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
             "confidence (0.0-1.0), summary (max 2 sentences)."
         ),
         agent=agent,
-        output_pydantic=AnalystResult,
     )
 
 

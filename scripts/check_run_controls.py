@@ -43,7 +43,7 @@ async def fake_analyze(ticker: str, emit, run_id: str = "", **_kwargs) -> StockA
     await asyncio.sleep(agent_s)
     analysis = StockAnalysis(
         ticker=ticker, company_name="Test Corp", price=100.0,
-        decision="HOLD", confidence=0.5,
+        decision="HOLD", manager_decision="HOLD", confidence=0.5,
     )
     # Mirror the real workflow: a decision is recorded only for a ticker whose
     # analysis ran all the way to completion, and its result is announced.
