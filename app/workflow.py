@@ -61,21 +61,9 @@ STREAM_MAX_CHARS = 16_384
 _MOCK_STREAM_WORDS = 5  # mock mode: words per streamed chunk
 _MOCK_STREAM_DELAY = 0.025  # seconds between chunks
 
-# Which role each agent runs as - per-role LLM overrides (ROADMAP 2.3) key
-# off this: cheap fast models for the researchers, a stronger one for the call.
-ROLE_BY_AGENT = {
-    "market": "analysts",
-    "technical": "analysts",
-    "fundamental": "analysts",
-    "news": "analysts",
-    "sentiment": "analysts",
-    "forecast": "analysts",
-    "bull": "debate",
-    "bear": "debate",
-    "judge": "debate",
-    "manager": "manager",
-}
-ROLES = ("manager", "analysts", "debate")
+# Per-role LLM overrides (ROADMAP 2.3) resolve through app.config.AGENT_ROLES
+# - cheap fast models for the researchers, a stronger one for the call - and
+# per-agent overrides (settings.llm_key_for) layer on top of the role.
 
 _llms: dict[str, Any] = {}  # role -> CrewAI LLM (None in mock mode)
 _llm_roles_initialized: set[str] = set()
@@ -151,24 +139,25 @@ def _build_llm(
     )
 
 
-def get_llm(role: str = "analysts") -> Any:
-    """Build (once) and cache the CrewAI LLM for one role.
+def get_llm(key: str = "analysts") -> Any:
+    """Build (once) and cache the CrewAI LLM for one key: a role, or an
+    agent name when that agent overrides its role's endpoint config.
 
     Roles: manager / analysts / debate, resolved via settings.llm_for -
-    per-role env overrides fall back to the global LLM_* values. Returns
-    None when no LLM is configured (mock mode).
+    per-role env overrides fall back to the global LLM_* values, per-agent
+    overrides beat both. Returns None when no LLM is configured (mock mode).
     """
-    if role not in _llm_roles_initialized:
-        _llm_roles_initialized.add(role)
+    if key not in _llm_roles_initialized:
+        _llm_roles_initialized.add(key)
         if settings.llm_configured:
             try:
-                _llms[role] = _build_llm(role)
+                _llms[key] = _build_llm(key)
             except Exception as exc:  # noqa: BLE001 - degrade to mock, don't crash
-                logger.error("[llm] could not build LLM for role %s: %s", role, exc)
-                _llms[role] = None
+                logger.error("[llm] could not build LLM for %s: %s", key, exc)
+                _llms[key] = None
         else:
-            _llms[role] = None
-    return _llms.get(role)
+            _llms[key] = None
+    return _llms.get(key)
 
 
 def get_chat_llm() -> Any:
@@ -191,34 +180,34 @@ def get_chat_llm() -> Any:
     return _llms.get("chat")
 
 
-def _drop_json_mode(role: str) -> Any:
-    """Rebuild a role's LLM without response_format after the provider
+def _drop_json_mode(key: str) -> Any:
+    """Rebuild a key's LLM without response_format after the provider
     rejected it (feature-detect on first use, not with a probe call)."""
     try:
-        _llms[role] = _build_llm(role, json_mode=False)
+        _llms[key] = _build_llm(key, json_mode=False)
         logger.warning(
-            "[llm] JSON mode disabled for role %s - provider rejected it", role
+            "[llm] JSON mode disabled for %s - provider rejected it", key
         )
-        return _llms[role]
+        return _llms[key]
     except Exception as exc:  # noqa: BLE001
-        logger.error("[llm] could not rebuild LLM for role %s: %s", role, exc)
+        logger.error("[llm] could not rebuild LLM for %s: %s", key, exc)
         return None
 
 
-def _drop_stream_mode(role: str) -> Any:
-    """Rebuild a role's LLM without streaming after the provider rejected it
+def _drop_stream_mode(key: str) -> Any:
+    """Rebuild a key's LLM without streaming after the provider rejected it
     (feature-detect on first use, exactly like the JSON-mode fallback). The
     JSON-mode setting of the current LLM is preserved."""
-    current = _llms.get(role)
+    current = _llms.get(key)
     json_mode = current is None or "response_format" in (
         getattr(current, "additional_params", None) or {}
     )
     try:
-        _llms[role] = _build_llm(role, json_mode=json_mode, stream=False)
-        logger.warning("[llm] streaming disabled for role %s - provider rejected it", role)
-        return _llms[role]
+        _llms[key] = _build_llm(key, json_mode=json_mode, stream=False)
+        logger.warning("[llm] streaming disabled for %s - provider rejected it", key)
+        return _llms[key]
     except Exception as exc:  # noqa: BLE001
-        logger.error("[llm] could not rebuild LLM for role %s: %s", role, exc)
+        logger.error("[llm] could not rebuild LLM for %s: %s", key, exc)
         return None
 
 
@@ -390,11 +379,13 @@ async def _run_agent(
     replays skip it).
     """
     agent_name = name or mod.NAME
-    role = ROLE_BY_AGENT.get(mod.NAME, "analysts")
+    # LLM identity: the agent's own override when configured, else its role
+    # (agents without an override share the role's LLM object).
+    llm_key = settings.llm_key_for(mod.NAME)
     await emit("agent_started", {"ticker": ticker, "agent": agent_name})
     started = time.perf_counter()
     try:
-        llm = get_llm(role)
+        llm = get_llm(llm_key)
         if llm is None:
             await asyncio.sleep(0.4)  # mock mode: give the UI a moment
             data = mod.mock(ticker, **task_payload)
@@ -439,7 +430,7 @@ async def _run_agent(
                     kind = _classify_failure(exc)
                     detail = str(exc)[:120]
                     if kind == "stream":
-                        replacement = _drop_stream_mode(role)
+                        replacement = _drop_stream_mode(llm_key)
                         if replacement is None:
                             break
                         logger.warning(
@@ -449,7 +440,7 @@ async def _run_agent(
                         llm = replacement
                         continue
                     if kind == "response_format":
-                        replacement = _drop_json_mode(role)
+                        replacement = _drop_json_mode(llm_key)
                         if replacement is None:
                             break
                         logger.warning(
@@ -493,9 +484,9 @@ async def _run_agent(
                 token_totals[key] = token_totals.get(key, 0) + value
         if role_usage is not None and usage:
             entry = role_usage.setdefault(
-                role,
+                llm_key,
                 {
-                    "model": settings.llm_for(role)["model"],
+                    "model": settings.llm_for(llm_key)["model"],
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "total_tokens": 0,

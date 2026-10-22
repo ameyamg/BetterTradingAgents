@@ -54,11 +54,18 @@ def _field(
     }
 
 
-def _role(prefix: str, label: str, blurb: str, model_example: str) -> list[dict[str, Any]]:
+def _role(
+    prefix: str,
+    label: str,
+    blurb: str,
+    model_example: str,
+    section: str = "",
+    fallback: str = "the global",
+) -> list[dict[str, Any]]:
     return [
-        _field(f"llm_model_{prefix}", f"LLM_MODEL_{prefix.upper()}", f"{label} model", hint=blurb, example=model_example),
-        _field(f"llm_base_url_{prefix}", f"LLM_BASE_URL_{prefix.upper()}", f"{label} base URL", hint="Empty = use the global base URL", example="https://api.openai.com/v1"),
-        _field(f"llm_api_key_{prefix}", f"LLM_API_KEY_{prefix.upper()}", f"{label} API key", secret=True, hint="Empty = use the global key", example="sk-..."),
+        _field(f"llm_model_{prefix}", f"LLM_MODEL_{prefix.upper()}", f"{label} model", hint=blurb, example=model_example, section=section),
+        _field(f"llm_base_url_{prefix}", f"LLM_BASE_URL_{prefix.upper()}", f"{label} base URL", hint=f"Empty = use {fallback} base URL", example="https://api.openai.com/v1", section=section),
+        _field(f"llm_api_key_{prefix}", f"LLM_API_KEY_{prefix.upper()}", f"{label} API key", secret=True, hint=f"Empty = use {fallback} key", example="sk-...", section=section),
     ]
 
 
@@ -81,11 +88,19 @@ FIELD_GROUPS: list[dict[str, Any]] = [
     {
         "key": "llm_roles",
         "tab": "Role models",
-        "label": "Per-role model overrides",
+        "label": "Per-role and per-agent model overrides",
         "fields": _role("manager", "Manager", "The final BUY/HOLD/SELL call: worth a stronger model", "zai-org/GLM-5.3")
         + [_field("llm_reasoning_effort_manager", "LLM_REASONING_EFFORT_MANAGER", "Manager reasoning effort", hint="Empty = global effort; high requests deeper reasoning on supported models", example="high")]
         + _role("analysts", "Analysts", "The 5 researchers: a cheap fast model works", "zai-org/GLM-5.3-Flash")
-        + _role("debate", "Debate", "Bull and bear argue the case", "zai-org/GLM-5.3-Flash"),
+        + _role("debate", "Debate", "Bull and bear argue the case", "zai-org/GLM-5.3-Flash")
+        # Per-agent overrides sit below the roles: agent -> role -> global.
+        + _role("market", "Market Analyst", "Broader market regime read", "zai-org/GLM-5.3-Flash", section="Market Analyst", fallback="the role's, then the global")
+        + _role("technical", "Technical Analyst", "Price-action read", "zai-org/GLM-5.3-Flash", section="Technical Analyst", fallback="the role's, then the global")
+        + _role("fundamental", "Fundamental Analyst", "Business quality and valuation", "zai-org/GLM-5.3-Flash", section="Fundamental Analyst", fallback="the role's, then the global")
+        + _role("news", "News Analyst", "Headline catalysts", "zai-org/GLM-5.3-Flash", section="News Analyst", fallback="the role's, then the global")
+        + _role("sentiment", "Sentiment Analyst", "Retail chatter mood", "zai-org/GLM-5.3-Flash", section="Sentiment Analyst", fallback="the role's, then the global")
+        + _role("forecast", "Forecast Analyst", "Statistical projection read", "zai-org/GLM-5.3-Flash", section="Forecast Analyst", fallback="the role's, then the global")
+        + _role("judge", "Debate Judge", "Adjudicates bull vs bear", "zai-org/GLM-5.3", section="Debate Judge", fallback="the debate role's, then the global"),
     },
     {
         "key": "providers",

@@ -24,6 +24,12 @@ os.environ["LLM_BASE_URL_DEBATE"] = ""
 os.environ["LLM_API_KEY_MANAGER"] = ""
 os.environ["LLM_API_KEY_ANALYSTS"] = ""
 os.environ["LLM_API_KEY_DEBATE"] = ""
+# Per-agent overrides: blank each one a real .env might carry, then set a
+# single agent override so the agent -> role -> global chain is exercised.
+for _agent in ("market", "technical", "fundamental", "news", "sentiment", "forecast", "judge"):
+    for _part in ("MODEL", "BASE_URL", "API_KEY"):
+        os.environ[f"LLM_{_part}_{_agent.upper()}"] = ""
+os.environ["LLM_MODEL_TECHNICAL"] = "tech-model"
 
 from app import workflow  # noqa: E402
 from app.config import settings  # noqa: E402
@@ -41,6 +47,30 @@ assert settings.llm_for("analysts") == {
 }
 assert settings.llm_for("debate")["model"] == "fast-model"
 print("per-role config OK: manager=GLM-5.3, analysts/debate=fast-model")
+
+# ---- per-agent config resolution: agent -> role -> global ----------------------
+assert settings.llm_for("technical") == {
+    "model": "tech-model",  # the agent override wins
+    "base_url": settings.llm_base_url,  # agent blank -> role blank -> global
+    "api_key": "test-key",
+}
+assert settings.llm_key_for("technical") == "technical"  # own LLM object
+assert settings.llm_key_for("fundamental") == "analysts"  # unoverridden: role LLM
+assert settings.llm_key_for("bull") == "debate" and settings.llm_key_for("manager") == "manager"
+# With only the global LLM set, every other agent resolves to it.
+for _agent in ("market", "fundamental", "news", "sentiment", "forecast", "judge", "bull", "bear"):
+    assert settings.llm_for(_agent) == {
+        "model": "fast-model", "base_url": settings.llm_base_url, "api_key": "test-key"
+    }, _agent
+# A role override feeds its agents; an agent override still beats the role.
+settings.llm_model_analysts = "analysts-model"
+try:
+    assert settings.llm_for("market")["model"] == "analysts-model"
+    assert settings.llm_for("technical")["model"] == "tech-model"
+    assert settings.llm_key_for("market") == "analysts"
+finally:
+    settings.llm_model_analysts = ""
+print("per-agent config OK: technical=tech-model, rest follow role/global")
 
 # ---- one LLM object per role, JSON mode on by default -------------------------
 mgr, ana, deb = workflow.get_llm("manager"), workflow.get_llm("analysts"), workflow.get_llm("debate")
