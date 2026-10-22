@@ -2,9 +2,13 @@
 
 Every agent run is one single-agent CrewAI crew. One agent failing never kills
 the run - its slot becomes None and downstream agents are told the input is
-missing. With STREAM_REASONING on, each agent's tokens stream to the UI as
-agent_token events (ROADMAP 3.2); mock mode streams the deterministic text
-word-by-word so the UI path is always testable.
+missing. Tasks set no output_pydantic on purpose: crewai's structured-output
+path silently replaces our json_object mode with a strict json_schema request
+that some OpenAI-compatible providers (e.g. api.deepseek.com) reject with a
+400 on every call, so JSON stays a prompt contract and every reply is parsed
+by extract_json. With STREAM_REASONING on, each agent's tokens stream to the
+UI as agent_token events (ROADMAP 3.2); mock mode streams the deterministic
+text word-by-word so the UI path is always testable.
 """
 
 import asyncio

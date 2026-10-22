@@ -57,7 +57,6 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
             "bull_case, bear_case, would_upgrade_if, would_downgrade_if."
         ),
         agent=agent,
-        output_pydantic=ManagerResult,
     )
 
 

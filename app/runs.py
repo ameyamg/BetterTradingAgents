@@ -24,6 +24,25 @@ FINISHED_RUN_GRACE_SECONDS = 600
 AnalysisCacheKey = tuple
 
 
+def _no_usable_output(result: StockAnalysis) -> bool:
+    """True when neither the manager nor any researcher produced a result.
+
+    Such a ticker carries only the default HOLD a dead manager falls back to,
+    so a run where every ticker looks like this is an outage, not an answer.
+    """
+    if result.error is not None:
+        return True
+    if result.manager_decision is not None:
+        return False
+    return all(
+        getattr(result, field) is None
+        for field in (
+            "technical", "fundamental", "news", "sentiment",
+            "forecast", "market", "bull", "bear", "judge",
+        )
+    )
+
+
 class Run:
     def __init__(
         self,
@@ -408,7 +427,14 @@ class RunStore:
                     asyncio.gather(*run.ticker_tasks.values()), deadline
                 )
                 run.results = {result.ticker: result for result in results}
-                run.status = "completed"
+                if results and all(_no_usable_output(r) for r in results):
+                    run.status = "failed"
+                    run.error = (
+                        "every agent failed - check the LLM settings "
+                        "(model, base URL, API key)"
+                    )
+                else:
+                    run.status = "completed"
         except asyncio.TimeoutError:
             # The deadline fired under a hung phase: fail the run instead of
             # leaving it "running" forever (P2.8).

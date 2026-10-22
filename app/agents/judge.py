@@ -56,7 +56,6 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
             "(max 3 sentences)."
         ),
         agent=agent,
-        output_pydantic=JudgeResult,
     )
 
 

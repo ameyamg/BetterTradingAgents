@@ -146,6 +146,7 @@ def _analysis(ticker: str, decision: str, confidence: float) -> StockAnalysis:
         ticker=ticker,
         price=100.0,
         decision=decision,  # type: ignore[arg-type]
+        manager_decision=decision,  # mirrors the real workflow's successful run
         confidence=confidence,
         as_of=RECENT,
     )

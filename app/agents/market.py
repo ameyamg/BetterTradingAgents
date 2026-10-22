@@ -9,7 +9,7 @@ dedicated source; the analyst notes that its read is data-driven.
 import json
 
 from app.agents import clamp_conf, clip, pick_signal
-from app.models import AgentResult, AnalystResult
+from app.models import AgentResult
 
 NAME = "market"
 DISPLAY = "Market Analyst"
@@ -50,7 +50,6 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
             "confidence (0.0-1.0), summary (max 2 sentences)."
         ),
         agent=agent,
-        output_pydantic=AnalystResult,
     )
 
 
