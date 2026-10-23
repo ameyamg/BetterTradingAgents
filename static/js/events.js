@@ -43,7 +43,10 @@ export function handleEvent(event) {
       setAgentStatus(ticker, event.agent, "running", "Running…");
       break;
     case "agent_completed": {
-      const resultLabel = event.signal ? labelFor(event.agent, event.signal, event.confidence) : "Complete";
+      const base = event.signal ? labelFor(event.agent, event.signal, event.confidence) : "Complete";
+      // A cached regime read shares another ticker's LLM call; say so, or
+      // the row looks like the agent never bothered to run.
+      const resultLabel = event.cached ? `${base} · shared` : base;
       setAgentStatus(ticker, event.agent, "done", resultLabel, event.duration_s, event.signal);
       if (event.summary) entry.agents[event.agent] = { signal: event.signal, confidence: event.confidence, summary: event.summary };
       entry.runningAgents?.delete(event.agent);

@@ -133,6 +133,13 @@ def _market_started(ticker: str) -> bool:
     )
 
 
+def _market_event_index(ticker: str, kind: str) -> int:
+    for i, (k, p) in enumerate(events):
+        if k == kind and p.get("agent") == "market" and p.get("ticker") == ticker:
+            return i
+    raise AssertionError(f"no {kind} market event for {ticker}")
+
+
 # Concurrent siblings of one run join the in-flight call: one agent run total.
 
 
@@ -145,6 +152,10 @@ assert market_agent_calls["count"] == 1, market_agent_calls
 done_a, done_b = _market_done("AAA"), _market_done("BBB")
 assert {("cached" in done_a), ("cached" in done_b)} == {True, False}
 assert first.market and second.market and first.market.signal == second.market.signal
+# The joiner waited on the initiator's call: it reports that wait as its
+# duration, not a hidden 0.0.
+joiner = done_a if "cached" in done_a else done_b
+assert joiner["duration_s"] > 0, joiner
 
 # A later ticker with the same snapshot reuses the finished read, with the
 # full started/completed event pair so the UI renders it like a real run.
@@ -152,6 +163,10 @@ asyncio.run(_analyze("CCC"))
 assert market_agent_calls["count"] == 1, "later ticker must reuse the regime read"
 assert _market_done("CCC").get("cached") is True
 assert _market_started("CCC")
+assert (
+    _market_event_index("CCC", "agent_started")
+    < _market_event_index("CCC", "agent_completed")
+), "cached reads must announce running before completing"
 
 # Incognito reads bypass the cache even when the snapshot is cached.
 asyncio.run(_analyze("X1", incognito=True))

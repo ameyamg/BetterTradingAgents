@@ -915,6 +915,13 @@ async def analyze_ticker(
             regime_key = "" if incognito else _regime_cache_key(indices)
             flight = _market_regime_cache.get(regime_key) if regime_key else None
             if flight is not None:
+                # Announce "running" up front: a joiner waits on the
+                # initiator's call, and a blank row during that wait reads as
+                # if the agent never ran. It did - it is sharing.
+                joined = time.perf_counter()
+                await emit(
+                    "agent_started", {"ticker": ticker, "agent": market_regime.NAME}
+                )
                 try:
                     hit = await flight
                 except asyncio.CancelledError:
@@ -924,12 +931,14 @@ async def analyze_ticker(
                 else:
                     data = {**hit, "ticker": ticker}
                     await emit(
-                        "agent_started", {"ticker": ticker, "agent": market_regime.NAME}
-                    )
-                    await emit(
                         "agent_completed",
                         _agent_completed_payload(
-                            ticker, market_regime.NAME, data, 0.0, 0, cached=True
+                            ticker,
+                            market_regime.NAME,
+                            data,
+                            time.perf_counter() - joined,
+                            0,
+                            cached=True,
                         ),
                     )
                     return data
