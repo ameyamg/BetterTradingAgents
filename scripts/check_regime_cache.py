@@ -152,10 +152,12 @@ assert market_agent_calls["count"] == 1, market_agent_calls
 done_a, done_b = _market_done("AAA"), _market_done("BBB")
 assert {("cached" in done_a), ("cached" in done_b)} == {True, False}
 assert first.market and second.market and first.market.signal == second.market.signal
-# The joiner waited on the initiator's call: it reports that wait as its
-# duration, not a hidden 0.0.
+# The joiner waited on the initiator's call: it reports that call's duration
+# (the same seconds as the initiator), not a hidden 0.0.
 joiner = done_a if "cached" in done_a else done_b
+runner = done_b if "cached" in done_a else done_a
 assert joiner["duration_s"] > 0, joiner
+assert abs(joiner["duration_s"] - runner["duration_s"]) < 2, (joiner, runner)
 
 # A later ticker with the same snapshot reuses the finished read, with the
 # full started/completed event pair so the UI renders it like a real run.
