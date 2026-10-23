@@ -21,6 +21,13 @@ decisions never trade), and the toggle enabled (DB, seeded from
 AUTOMATION_ENABLED). Scheduled sessions additionally wait for the market
 to open; a manual "run now" may trade a closed-market session and those
 orders simply queue for the next open.
+
+Three deterministic brakes ride on top (wiki Roadmap P2.4): BUYs stop once
+autopilot's net deployed notional passes AUTOMATION_MAX_DEPLOYED_PCT of
+equity or would take cash below AUTOMATION_CASH_FLOOR_PCT; while SPY sits
+below its 200-day average BUYs are recorded as braked (research and exits
+continue); and WEBHOOK_URL, when set, receives one plain-text POST per
+finished session.
 """
 
 from __future__ import annotations
@@ -30,6 +37,9 @@ import json
 import logging
 import sqlite3
 import time
+from datetime import date, timedelta
+
+import httpx
 
 from app.config import settings
 from app.depth import normalize_depth
@@ -295,6 +305,90 @@ def _final_decisions(results: dict[str, StockAnalysis]) -> dict[str, str]:
     }
 
 
+def _automation_deployed() -> float:
+    """Net USD autopilot has deployed: its non-rejected BUY notional minus its
+    filled SELL notional (orders whose run belongs to autopilot, owner_id
+    'automation'). Conservative on purpose - a pending or unknown buy still
+    consumes the budget, an unfilled exit frees nothing (wiki Roadmap P2.4)."""
+    with _connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT o.side AS side, SUM(o.notional) AS total
+            FROM broker_orders o
+            JOIN analysis_runs r ON r.run_id = o.run_id
+            WHERE r.owner_id = 'automation'
+              AND ((o.side = 'buy' AND o.status NOT IN ('rejected', 'canceled', 'expired'))
+                   OR (o.side = 'sell' AND o.status = 'filled'))
+            GROUP BY o.side
+            """
+        ).fetchall()
+    totals = {row["side"]: float(row["total"] or 0.0) for row in rows}
+    return max(0.0, totals.get("buy", 0.0) - totals.get("sell", 0.0))
+
+
+async def _bear_market() -> bool | None:
+    """True when SPY sits below its 200-day average (wiki Roadmap P2.4).
+    None when the answer is unknown - too little history or a fetch failure -
+    and the brake then fails open: a data outage must not silently halt
+    exits-and-research sessions, and a BUY still passes every other guard."""
+    from app.tools.market_data import get_closes_between
+
+    start = (date.today() - timedelta(days=310)).isoformat()
+    end = (date.today() + timedelta(days=1)).isoformat()
+    try:
+        closes = await get_closes_between("SPY", start, end)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[automation] bear-market check failed (not braking): %s", exc)
+        return None
+    if len(closes) < 200:
+        logger.warning(
+            "[automation] only %d SPY closes, need 200; not braking", len(closes)
+        )
+        return None
+    window = [closes[day] for day in sorted(closes)[-200:]]
+    return window[-1] < sum(window) / len(window)
+
+
+async def _post_webhook(session_outcome: "AutomationSession") -> None:
+    """One plain-text POST per finished session (completed or failed; wiki
+    Roadmap P2.4). Best-effort: a webhook failure logs and never touches the
+    session's own status."""
+    url = settings.webhook_url
+    if not url:
+        return
+    lines = [
+        f"BetterTradingAgents autopilot session #{session_outcome.id} "
+        f"{session_outcome.status} ({session_outcome.trigger})"
+    ]
+    if session_outcome.tickers:
+        lines.append("Tickers: " + ", ".join(session_outcome.tickers))
+    if session_outcome.decisions:
+        lines.append(
+            "Decisions: "
+            + ", ".join(
+                f"{ticker}={decision}"
+                for ticker, decision in session_outcome.decisions.items()
+            )
+        )
+    for order in session_outcome.orders:
+        entry = f"Order: {order.side} {order.ticker}"
+        if order.notional is not None:
+            entry += f" ${order.notional:,.0f}"
+        entry += f" -> {order.status}"
+        if order.error:
+            entry += f" ({order.error})"
+        lines.append(entry)
+    if session_outcome.error:
+        lines.append(f"Error: {session_outcome.error}")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                url, content="\n".join(lines), headers={"Content-Type": "text/plain"}
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[automation] webhook POST failed: %s", exc)
+
+
 async def run_session(trigger: str = "schedule") -> AutomationSession:
     """One full scan -> analyze -> order cycle. Never raises.
 
@@ -421,11 +515,24 @@ async def _run_session_locked(trigger: str) -> AutomationSession:
                     run.run_id,
                     ", ".join(f"{t}={a.decision}" for t, a in results.items()),
                 )
+                # One SPY read per session decides the bear-market brake for
+                # every BUY below (None = unknown, brake fails open).
+                bear = (
+                    await _bear_market()
+                    if any(
+                        not a.error and a.decision == "BUY" for a in results.values()
+                    )
+                    else None
+                )
+                if bear:
+                    logger.info(
+                        "[automation] bear-market brake on: SPY below its 200-day average"
+                    )
                 for ticker, analysis in results.items():
                     if analysis.error:
                         continue
                     order = await _act_on_decision(
-                        run.run_id, ticker, analysis, held_map
+                        run.run_id, ticker, analysis, held_map, bear=bear
                     )
                     if order is not None:
                         orders.append(order)
@@ -440,7 +547,7 @@ async def _run_session_locked(trigger: str) -> AutomationSession:
         await asyncio.to_thread(
             _finish_session, session_id, status, run_id, tickers, decisions, orders, error
         )
-    return AutomationSession(
+    finished = AutomationSession(
         id=session_id,
         trigger=trigger,
         status=status,
@@ -452,10 +559,17 @@ async def _run_session_locked(trigger: str) -> AutomationSession:
         orders=orders,
         error=error,
     )
+    if status in ("completed", "failed"):
+        await _post_webhook(finished)
+    return finished
 
 
 async def _act_on_decision(
-    run_id: str, ticker: str, analysis: StockAnalysis, held_map: dict
+    run_id: str,
+    ticker: str,
+    analysis: StockAnalysis,
+    held_map: dict,
+    bear: bool | None = None,
 ) -> AutomationOrderOutcome | None:
     """Translate one risk-gated decision into an order attempt, or None when
     the decision is nothing to act on (HOLD, weak BUY, SELL with sells off)."""
@@ -485,6 +599,44 @@ async def _act_on_decision(
             return None
         notional = analysis.suggested_size_usd or settings.default_position_size
         side = "buy"
+        if bear:  # wiki Roadmap P2.4: research and exits continue, BUYs brake
+            return AutomationOrderOutcome(
+                ticker=ticker, side="buy", notional=notional, status="braked",
+                error="bear-market brake: SPY sits below its 200-day average",
+            )
+        # Portfolio budget (wiki Roadmap P2.4): deterministic, same shape as
+        # every other limit - a share-of-equity deployment cap plus a cash
+        # floor. Defaults (1.0 / 0.0) leave only the global risk gate.
+        try:
+            account = await broker.account()
+        except Exception as exc:  # noqa: BLE001 - fail closed: skip, never over-deploy
+            logger.warning("[automation] %s budget check failed: %s", ticker, exc)
+            return AutomationOrderOutcome(
+                ticker=ticker, side="buy", notional=notional, status="skipped",
+                error="could not read the paper account before ordering",
+            )
+        if account.equity:
+            deployed = await asyncio.to_thread(_automation_deployed)
+            if deployed + notional > settings.automation_max_deployed_pct * account.equity:
+                return AutomationOrderOutcome(
+                    ticker=ticker, side="buy", notional=notional, status="skipped",
+                    error=(
+                        f"autopilot budget: ${deployed + notional:,.0f} deployed would "
+                        f"pass {settings.automation_max_deployed_pct:.0%} of equity"
+                    ),
+                )
+            if account.cash is not None and (
+                account.cash - notional
+                < settings.automation_cash_floor_pct * account.equity
+            ):
+                return AutomationOrderOutcome(
+                    ticker=ticker, side="buy", notional=notional, status="skipped",
+                    error=(
+                        f"autopilot cash floor: would leave "
+                        f"${max(0.0, account.cash - notional):,.0f}, below "
+                        f"{settings.automation_cash_floor_pct:.0%} of equity"
+                    ),
+                )
     elif analysis.decision == "SELL" and settings.automation_allow_sells:
         position = held_map.get(ticker)
         if position is None:
