@@ -459,6 +459,20 @@ def reset() -> None:
         setattr(settings, name, value)
 
 
+def flag_get(name: str) -> bool:
+    """A raw boolean flag row in user_settings (not a settings field, so
+    apply_overrides ignores it). UI state like the onboarding dismissal."""
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM user_settings WHERE key = ?", (name,)
+        ).fetchone()
+    return bool(row and row["value"] == "1")
+
+
+def flag_set(name: str, value: bool) -> None:
+    _db_set(name, "1" if value else "0")
+
+
 def snapshot() -> dict[str, Any]:
     """The settings page payload: full values for non-secrets, source chips
     and a configured flag for secrets (values are never sent back)."""

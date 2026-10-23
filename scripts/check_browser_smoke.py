@@ -755,6 +755,12 @@ def main() -> None:
     server, port = start_server()
     global BASE_URL
     BASE_URL = f"http://127.0.0.1:{port}"
+    # First-run onboarding card (P2.7): pre-dismiss it so every scenario below
+    # walks the steady-state page of a returning visitor (its own API flow is
+    # covered by scripts/check_onboarding.py).
+    from app import settings_store  # noqa: E402 - same process, same temp DB
+
+    settings_store.flag_set("onboarding_dismissed", True)
     original_analyze = runs.analyze_ticker
     original_portfolio = runs.fetch_portfolio_summary
     original_closes = main_module.get_closes_between
