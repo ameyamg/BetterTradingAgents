@@ -915,6 +915,12 @@ async def analyze_ticker(
             regime_key = "" if incognito else _regime_cache_key(indices)
             flight = _market_regime_cache.get(regime_key) if regime_key else None
             if flight is not None:
+                # Announce "running" up front: a joiner waits on the
+                # initiator's call, and a blank row during that wait reads as
+                # if the agent never ran.
+                await emit(
+                    "agent_started", {"ticker": ticker, "agent": market_regime.NAME}
+                )
                 try:
                     hit = await flight
                 except asyncio.CancelledError:
@@ -922,19 +928,17 @@ async def analyze_ticker(
                 if hit is None:
                     _market_regime_cache.pop(regime_key, None)
                 else:
-                    data = {**hit, "ticker": ticker}
-                    await emit(
-                        "agent_started", {"ticker": ticker, "agent": market_regime.NAME}
-                    )
+                    data = {**hit["result"], "ticker": ticker}
                     await emit(
                         "agent_completed",
                         _agent_completed_payload(
-                            ticker, market_regime.NAME, data, 0.0, 0, cached=True
+                            ticker, market_regime.NAME, data, hit["duration_s"], 0, cached=True
                         ),
                     )
                     return data
 
             async def _regime_once() -> dict | None:
+                started = time.perf_counter()
                 result = await _run_agent(
                     market_regime,
                     ticker,
@@ -944,11 +948,16 @@ async def analyze_ticker(
                     live=live_context,
                     payload=indices,
                 )
-                # Copy so no caller can mutate the dict the cache shares.
-                return {**result} if result else None
+                if not result:
+                    return None
+                # Copy so no caller can mutate the dict the cache shares. The
+                # initiator's wall time rides along so reused reads display
+                # the same duration the call took, not a blank.
+                return {"result": {**result}, "duration_s": time.perf_counter() - started}
 
             if not regime_key:
-                return await _regime_once()
+                outcome = await _regime_once()
+                return outcome["result"] if outcome else None
             # No await between the miss check and this store: siblings in the
             # same loop are guaranteed to see the flight, not start their own.
             flight = asyncio.ensure_future(_regime_once())
@@ -956,15 +965,15 @@ async def analyze_ticker(
             while len(_market_regime_cache) > _REGIME_CACHE_MAX:
                 _market_regime_cache.popitem(last=False)
             try:
-                data = await flight
+                outcome = await flight
             except asyncio.CancelledError:
                 _market_regime_cache.pop(regime_key, None)
                 raise
-            if not data:
+            if not outcome:
                 # A failed run is never cached; drop the flight so a later
                 # ticker retries instead of joining a dead result.
                 _market_regime_cache.pop(regime_key, None)
-            return {**data} if data else None
+            return {**outcome["result"]} if outcome else None
         if key == "technical":
             return await _run_agent(
                 technical,
