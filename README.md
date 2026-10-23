@@ -153,7 +153,8 @@ holdout. Sweep of 2026-10-21, 6 tickers, 23 dates, 138 decisions per arm:
 - Full grid: Max +214.6% vs momentum +132.2% vs SPY +31.3%
 - Paired: Max +1.28% net per decision over Fast, 95% CI excludes zero
 - Judge halves worst drawdown; mock agents, real-LLM replays cost-gated
-- Validated 2026-10-22: recomputed from raw artifacts, sweep re-run reproduced
+- Validated 2026-10-22, re-validated 2026-10-23 after the simplify pass: sweep
+  re-run reproduced every number and all 138 decisions per arm identically
 
 ```bash
 uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30
