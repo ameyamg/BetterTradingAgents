@@ -12,10 +12,12 @@ text word-by-word so the UI path is always testable.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
 import time
+from collections import OrderedDict
 from typing import Any, Awaitable, Callable
 
 from app import changes, cost, quality, risk
@@ -357,6 +359,51 @@ async def _stream_mock_text(ticker: str, agent_name: str, text: str, emit: Emit)
         await asyncio.sleep(_MOCK_STREAM_DELAY)
 
 
+# The Market Analyst reads index-level stats only (no ticker data), so one
+# regime read answers for every ticker that sees the same indices snapshot.
+# Keyed by payload content plus model identity, never by time: a new trading
+# day's numbers miss the cache naturally, and identical input under the same
+# model can never be a stale read. Values are single-flight tasks, so the
+# concurrent siblings of one run join the in-flight call instead of each
+# paying the LLM. Bounded because intraday refreshes jitter the numbers and
+# every distinct snapshot would otherwise stay forever.
+_market_regime_cache: OrderedDict[str, asyncio.Task] = OrderedDict()
+_REGIME_CACHE_MAX = 16
+
+
+def _regime_cache_key(indices: dict) -> str:
+    # Settings apply live without a restart: a model switch (or mock -> real)
+    # under an unchanged snapshot must not be answered by the old model's read.
+    llm_key = settings.llm_key_for(market_regime.NAME)
+    llm = get_llm(llm_key)
+    identity = "mock" if llm is None else f"{llm_key}:{settings.llm_for(llm_key)['model']}"
+    return hashlib.sha256(
+        json.dumps([indices, identity], sort_keys=True, default=str).encode()
+    ).hexdigest()
+
+
+def _agent_completed_payload(
+    ticker: str,
+    agent: str,
+    data: dict,
+    duration_s: float,
+    tokens: int,
+    cached: bool = False,
+) -> dict:
+    event = {
+        "ticker": ticker,
+        "agent": agent,
+        "duration_s": round(duration_s, 1),
+        "signal": data.get("signal") or data.get("decision"),
+        "confidence": data.get("confidence") or data.get("score"),
+        "summary": str(data.get("summary", ""))[:200],
+        "tokens": tokens,
+    }
+    if cached:
+        event["cached"] = True
+    return event
+
+
 async def _run_agent(
     mod,
     ticker: str,
@@ -496,15 +543,9 @@ async def _run_agent(
                 entry[key] += int(usage.get(key, 0) or 0)
         await emit(
             "agent_completed",
-            {
-                "ticker": ticker,
-                "agent": agent_name,
-                "duration_s": round(duration, 1),
-                "signal": data.get("signal") or data.get("decision"),
-                "confidence": data.get("confidence") or data.get("score"),
-                "summary": str(data.get("summary", ""))[:200],
-                "tokens": usage.get("total_tokens", 0),
-            },
+            _agent_completed_payload(
+                ticker, agent_name, data, duration, usage.get("total_tokens", 0)
+            ),
         )
         return data
     except Exception as exc:  # noqa: BLE001 - one agent failing must not kill the run
@@ -867,15 +908,63 @@ async def analyze_ticker(
                     },
                 )
                 return None
-            return await _run_agent(
-                market_regime,
-                ticker,
-                emit,
-                token_totals=token_totals,
-                role_usage=role_usage,
-                live=live_context,
-                payload=indices,
-            )
+            # One regime read per identical index snapshot: the payload holds
+            # no ticker data, so sibling tickers reuse it instead of paying
+            # the LLM again - concurrent siblings join the in-flight task.
+            # Incognito shares no state, read or write.
+            regime_key = "" if incognito else _regime_cache_key(indices)
+            flight = _market_regime_cache.get(regime_key) if regime_key else None
+            if flight is not None:
+                try:
+                    hit = await flight
+                except asyncio.CancelledError:
+                    hit = None  # the flight died with an aborted run; retry
+                if hit is None:
+                    _market_regime_cache.pop(regime_key, None)
+                else:
+                    data = {**hit, "ticker": ticker}
+                    await emit(
+                        "agent_started", {"ticker": ticker, "agent": market_regime.NAME}
+                    )
+                    await emit(
+                        "agent_completed",
+                        _agent_completed_payload(
+                            ticker, market_regime.NAME, data, 0.0, 0, cached=True
+                        ),
+                    )
+                    return data
+
+            async def _regime_once() -> dict | None:
+                result = await _run_agent(
+                    market_regime,
+                    ticker,
+                    emit,
+                    token_totals=token_totals,
+                    role_usage=role_usage,
+                    live=live_context,
+                    payload=indices,
+                )
+                # Copy so no caller can mutate the dict the cache shares.
+                return {**result} if result else None
+
+            if not regime_key:
+                return await _regime_once()
+            # No await between the miss check and this store: siblings in the
+            # same loop are guaranteed to see the flight, not start their own.
+            flight = asyncio.ensure_future(_regime_once())
+            _market_regime_cache[regime_key] = flight
+            while len(_market_regime_cache) > _REGIME_CACHE_MAX:
+                _market_regime_cache.popitem(last=False)
+            try:
+                data = await flight
+            except asyncio.CancelledError:
+                _market_regime_cache.pop(regime_key, None)
+                raise
+            if not data:
+                # A failed run is never cached; drop the flight so a later
+                # ticker retries instead of joining a dead result.
+                _market_regime_cache.pop(regime_key, None)
+            return {**data} if data else None
         if key == "technical":
             return await _run_agent(
                 technical,
