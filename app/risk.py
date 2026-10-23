@@ -32,6 +32,7 @@ Rules, not an LLM: free, testable, no hallucination surface (wiki Roadmap 1.2).
 
 import logging
 from math import sqrt
+from statistics import StatisticsError, correlation
 
 from app.config import settings
 from app.models import AgentResult, ConcentrationCheck, PortfolioSummary
@@ -113,15 +114,10 @@ def returns_correlation(
     n = min(len(returns_a), len(returns_b))
     if n < MIN_RETURN_OBS:
         return None
-    returns_a, returns_b = returns_a[-n:], returns_b[-n:]
-    mean_a = sum(returns_a) / n
-    mean_b = sum(returns_b) / n
-    cov = sum((x - mean_a) * (y - mean_b) for x, y in zip(returns_a, returns_b))
-    var_a = sum((x - mean_a) ** 2 for x in returns_a)
-    var_b = sum((y - mean_b) ** 2 for y in returns_b)
-    if var_a <= 0 or var_b <= 0:
-        return None
-    return cov / sqrt(var_a * var_b)
+    try:
+        return correlation(returns_a[-n:], returns_b[-n:])
+    except StatisticsError:
+        return None  # a flat series: unknown, never zero
 
 
 def concentration_check(

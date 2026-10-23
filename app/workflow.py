@@ -752,8 +752,8 @@ async def analyze_ticker(
     share it across tickers; when omitted it is fetched here. `outlook` is the
     user's chosen horizon (day_trade / short_term / long_term) and is injected
     into every agent payload so the whole crew weighs evidence for that horizon.
-    `depth` (fast / medium / expert) selects which researchers run and whether
-    the debate gets a rebuttal round - fewer agents, faster run. `run_id` tags
+    `depth` (fast / pro / max) selects which researchers run and whether
+    the debate judge cross-examines bull and bear - fewer agents, faster run. `run_id` tags
     the decision-memory row written at the end of a successful run.
     `market_data` injects a pre-built snapshot (backtests replay date T with
     only data known at T); `live_context=False` is the backtest mode: no

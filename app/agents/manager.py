@@ -3,10 +3,9 @@
 import json
 
 from app.agents import clamp_conf, clip
-from app.models import AgentResult, ManagerResult
+from app.models import ManagerResult
 
 NAME = "manager"
-DISPLAY = "Portfolio Manager"
 
 
 def build_agent(llm):
@@ -65,16 +64,6 @@ def parse_decision(data: dict) -> str | None:
     tolerated). "DO NOT BUY" and other prose are parse failures, not BUY."""
     decision = str(data.get("decision", "")).strip().upper()
     return decision if decision in ("BUY", "HOLD", "SELL") else None
-
-
-def to_result(data: dict, ticker: str) -> AgentResult:
-    manager = to_manager_result(data, ticker)
-    return AgentResult(
-        agent=NAME,
-        signal={"BUY": "bullish", "SELL": "bearish"}.get(manager.decision, "neutral"),
-        confidence=manager.confidence,
-        summary=manager.summary,
-    )
 
 
 def to_manager_result(data: dict, ticker: str) -> ManagerResult:

@@ -2,11 +2,10 @@
 
 import json
 
-from app.agents import clamp_conf, pick_signal, clip
+from app.agents import analyst_result
 from app.models import AgentResult
 
 NAME = "forecast"
-DISPLAY = "Forecast Analyst"
 
 
 def build_agent(llm):
@@ -65,12 +64,7 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
 
 
 def to_result(data: dict, ticker: str) -> AgentResult:
-    return AgentResult(
-        agent=NAME,
-        signal=pick_signal(data.get("signal")),
-        confidence=clamp_conf(data.get("confidence")),
-        summary=clip(data.get("summary", ""), 500),
-    )
+    return analyst_result(NAME, data)
 
 
 def mock(ticker: str, payload: dict) -> dict:

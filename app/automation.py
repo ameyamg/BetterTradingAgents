@@ -35,7 +35,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sqlite3
 import time
 from datetime import date, timedelta
 
@@ -50,6 +49,7 @@ from app.models import (
     StockAnalysis,
 )
 from app.outlook import normalize_outlook
+from app.db import connect as _connect
 
 logger = logging.getLogger("automation")
 
@@ -70,10 +70,6 @@ _next_check_at: float | None = None
 # ---- local tables -----------------------------------------------------------
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 def _init_db() -> None:

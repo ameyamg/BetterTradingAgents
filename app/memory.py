@@ -26,6 +26,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from app.config import settings
 from app.models import StockAnalysis
+from app.db import connect as _connect
 
 logger = logging.getLogger("memory")
 
@@ -35,10 +36,6 @@ ALPHA_EDGE_PCT = 1.0  # |alpha| beyond this counts as a right/wrong call
 MOVE_EDGE_PCT = 2.0  # |return| beyond this makes a HOLD an avoid/miss
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 def _init_db() -> None:
