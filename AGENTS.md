@@ -23,9 +23,8 @@ Python 3.12+, dependencies managed by `uv`. No frontend build step (vanilla HTML
 
 ## Branching
 
-- `dev` is the integration branch: branch `feat/`, `fix/`, `docs/`, `exp/` off it and merge back into it.
-- `test` is cut from `dev` to run the full gate (`uv run test all`) before a release.
-- `main` only changes via PR from `dev`, with CI green. See CONTRIBUTING.md for the full flow.
+- `dev` is the long-lived integration and experiment branch: branch `feat/`, `fix/`, `docs/`, `exp/` off it and merge back into it; it PRs into `main` whenever a batch is ready.
+- `main` is protected: merges need a PR with green CI (admins exempt). See CONTRIBUTING.md for the full flow.
 
 ## Conventions
 
