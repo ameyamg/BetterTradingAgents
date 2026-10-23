@@ -42,7 +42,7 @@ Paper trading only. Research base: the
 | 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
 | 📊 | **Real market data** | Finnhub, Olostep, yfinance; TimeGPT or Chronos-2 forecasts, local fallback. |
 | 🧠 | **Model flexibility** | Any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama), per role or per agent, with automatic fallback when a provider rejects an output format. |
-| 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps. |
+| 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps, plus a deployment budget, bear-market brake, and session webhook. |
 | 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served by FastAPI. |
 
 ## How it works
@@ -76,8 +76,9 @@ uv run app     # start the app on http://127.0.0.1:8000
 
 > [!TIP]
 > No LLM key yet? Leave `LLM_API_KEY` empty and the full workflow runs in clearly
-> labeled mock mode on live market data. Everything is editable later on the in-app
-> Settings page, no restart needed.
+> labeled mock mode on live market data. A skippable **Get set up** card on Home
+> walks the first keys with a live test. Everything is editable later on the
+> in-app Settings page, no restart needed.
 
 ## Using the app
 
@@ -106,9 +107,11 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `TSFM_API_KEY` | Not set | 5-day forecast (Chronos-2) when TimeGPT is down |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
-| `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar |
+| `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |
+| `WEBHOOK_URL` | Not set | One plain-text POST per finished autopilot session |
 
-Everything else (per-role models, cost overrides, risk caps, memory, backtest knobs):
+Everything else (per-role models, cost overrides, token and retry bounds, risk
+caps, memory, backtest knobs):
 wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Configuration).
 
 ## Security
@@ -126,6 +129,7 @@ wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Conf
 | `GET` | `/api/runs/{run_id}/events` | Live progress over SSE |
 | `POST` | `/api/runs/{run_id}/chat` | Follow-up chat with the manager |
 | `GET/POST` | `/api/settings` | Read and save settings (secrets masked) |
+| `GET` | `/api/onboarding` | First-run setup state; `POST` variants validate keys live |
 | `GET` | `/api/broker/account` | Paper account state |
 | `POST` | `/api/broker/orders` | Place one paper order (explicit `confirm`) |
 | `GET` | `/api/broker/sync` | Reconciliation and drift state |
