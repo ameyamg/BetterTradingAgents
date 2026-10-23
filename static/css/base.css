@@ -397,3 +397,19 @@ footer { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wr
   padding: 5px 9px; border-radius: 8px; border: 1px solid var(--border-strong);
   background: rgba(9, 14, 25, 0.97); color: var(--text); font-size: 11px; white-space: nowrap;
 }
+
+/* ---- onboarding card (wiki Roadmap P2.7) ---- */
+.onboarding-card h2 { text-transform: none; }
+.onboarding-step { border-top: 1px solid var(--border); padding: 12px 0 4px; }
+.onboarding-step-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.onboarding-fields { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; align-items: flex-end; }
+.onboarding-field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+.onboarding-field input {
+  background: rgba(0, 0, 0, 0.38); border: 1px solid var(--border); color: var(--text);
+  border-radius: 9px; padding: 7px 10px; font-size: 13px; font-family: var(--font); outline: none;
+  min-width: 150px;
+}
+.onboarding-result { font-size: 12px; margin: 6px 0 0; color: var(--muted); }
+.onboarding-result.bad { color: var(--sell); }
+.onboarding-preflight { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; font-size: 12px; }
+.onboarding-actions { margin-top: 14px; }
