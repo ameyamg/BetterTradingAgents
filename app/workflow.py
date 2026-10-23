@@ -70,7 +70,7 @@ _MOCK_STREAM_DELAY = 0.025  # seconds between chunks
 _llms: dict[str, Any] = {}  # role -> CrewAI LLM (None in mock mode)
 _llm_roles_initialized: set[str] = set()
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
-_BACKOFF_SECONDS = (1.0, 4.0)  # HTTP 429/5xx: wait, retry, wait longer
+_BACKOFF_SECONDS = (1.0, 4.0, 16.0, 60.0)  # HTTP 429/5xx: wait, retry, wait longer
 
 
 # Model prefixes crewai routes itself; anything else (bare names and org/model
@@ -135,6 +135,7 @@ def _build_llm(
         api_key=conf["api_key"],
         temperature=settings.llm_temperature,
         timeout=settings.llm_timeout_seconds,
+        max_tokens=settings.llm_max_tokens or None,  # P2.18: 0 = provider default
         reasoning_effort=effort or None,
         stream=stream,
         additional_params=extra,
@@ -446,7 +447,8 @@ async def _run_agent(
             usage = {}
             last_error: Exception | None = None
             correction: str | None = None
-            for attempt in range(1, 4):
+            retries = settings.llm_max_retries  # P2.18: bound the retry budget
+            for attempt in range(1, retries + 2):
                 try:
                     agent = mod.build_agent(llm)
                     task = mod.build_task(agent, ticker, **task_payload)
@@ -496,19 +498,20 @@ async def _run_agent(
                         )
                         llm = replacement
                         continue
-                    if kind in ("rate_limit", "server") and attempt < 3:
-                        wait = _BACKOFF_SECONDS[min(attempt - 1, 1)]
+                    if kind in ("rate_limit", "server") and attempt < retries + 1:
+                        wait = _BACKOFF_SECONDS[min(attempt - 1, len(_BACKOFF_SECONDS) - 1)]
                         logger.warning(
-                            "[%s] %s error (%s); retry %d/2 in %.0fs",
+                            "[%s] %s error (%s); retry %d/%d in %.0fs",
                             agent_name,
                             kind,
                             detail,
                             attempt,
+                            retries,
                             wait,
                         )
                         await asyncio.sleep(wait)
                         continue
-                    if kind == "bad_output" and correction is None and attempt < 3:
+                    if kind == "bad_output" and correction is None and attempt < retries + 1:
                         logger.warning(
                             "[%s] malformed output (%s); retrying with the error fed back",
                             agent_name,

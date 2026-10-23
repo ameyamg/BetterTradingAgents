@@ -61,6 +61,11 @@ class Settings:
     llm_model: str = _env("LLM_MODEL", "gpt-6-luna")
     llm_temperature: float = float(_env("LLM_TEMPERATURE", "0.2"))
     llm_timeout_seconds: float = float(_env("LLM_TIMEOUT_SECONDS", "90"))
+    # P2.18 runaway bounds: max tokens forwarded to every provider (0 = let
+    # the provider default stand) and smart retries per LLM call after
+    # 429/5xx/malformed-output failures (0 = fail fast). Defaults = today.
+    llm_max_tokens: int = max(0, int(_env("MAX_TOKENS", "0")))
+    llm_max_retries: int = min(10, max(0, int(_env("LLM_MAX_RETRIES", "2"))))
     # Optional provider-specific reasoning effort (e.g. "none"/"low" for GLM).
     llm_reasoning_effort: str = _env("LLM_REASONING_EFFORT")
     llm_reasoning_effort_manager: str = _env("LLM_REASONING_EFFORT_MANAGER")
