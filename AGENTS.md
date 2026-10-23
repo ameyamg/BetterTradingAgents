@@ -21,6 +21,12 @@ Python 3.12+, dependencies managed by `uv`. No frontend build step (vanilla HTML
 - `backtests/` — generated backtest artifacts (reports, manifests, `cache.db`).
 - `portfolio.db` — local SQLite (run history, paper account). Treat as data, not source.
 
+## Branching
+
+- `dev` is the integration branch: branch `feat/`, `fix/`, `docs/`, `exp/` off it and merge back into it.
+- `test` is cut from `dev` to run the full gate (`uv run test all`) before a release.
+- `main` only changes via PR from `dev`, with CI green. See CONTRIBUTING.md for the full flow.
+
 ## Conventions
 
 - Add behavior in the narrowest module that already owns it; match the surrounding style (typed, small functions, docstrings that explain *why*).
