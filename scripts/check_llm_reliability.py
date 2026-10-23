@@ -82,6 +82,15 @@ assert mgr.additional_params.get("response_format") == {"type": "json_object"}
 assert ana.additional_params.get("response_format") == {"type": "json_object"}
 print("per-role LLMs OK:", mgr.model, "/", ana.model)
 
+# ---- P2.18: runaway bounds forwarded to every provider ----------------------
+settings.llm_max_tokens = 4096
+capped = workflow._build_llm("analysts")
+assert capped.max_tokens == 4096, capped.max_tokens
+settings.llm_max_tokens = 0
+uncapped = workflow._build_llm("analysts")
+assert uncapped.max_tokens is None, uncapped.max_tokens  # 0 = today's behaviour
+print("max_tokens OK: 4096 forwarded, 0 leaves the provider default")
+
 # ---- failure classification ----------------------------------------------------
 assert workflow._classify_failure(ValueError("no JSON object in model output: 'BUY because'")) == "bad_output"
 assert workflow._classify_failure(RuntimeError("HTTP 429 - rate limit exceeded")) == "rate_limit"
@@ -197,6 +206,21 @@ async def retry_checks():
 
     await run_retry_test(RuntimeError("server error 503 - overloaded"), 2, False)
     print("server-error retry OK")
+
+    # P2.18: retries=0 fails fast - a rate limit gets no second attempt
+    settings.llm_max_retries = 0
+    calls = []
+
+    async def always_429(agent, task):  # noqa: ARG001
+        calls.append(task.description)
+        raise RuntimeError("HTTP 429 - rate limit exceeded")
+
+    workflow._kick_once = always_429
+    data = await workflow._run_agent(FakeMod(), "NVDA", emit, token_totals={})
+    assert data is None and len(calls) == 1, calls
+    assert events[-1][0] == "agent_failed"
+    settings.llm_max_retries = 2
+    print("retry budget OK: retries=0 fails fast on a rate limit")
 
     # JSON mode self-healing: role LLM rebuilt without response_format
     workflow._llms["manager"] = workflow._build_llm("manager")  # ensure it's on
