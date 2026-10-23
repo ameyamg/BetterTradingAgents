@@ -151,6 +151,59 @@ check("reset clears the DB table", settings_store._db_overrides() == {})
 check("reset wipes keychain entries", not any(k.endswith("/llm_api_key") for k in KEYRING.entries))
 check("reset response masks secrets", SECRET_VALUE not in response.text)
 
+# ---- full-spec round-trip: every setting saves exactly, nothing missing -----
+# Owner ask 2026-10-23: walk EVERY field, not samples. Each non-secret gets a
+# probe inside its own bounds; a value that does not apply exactly (wrong
+# value or wrong type), or a spec field missing from the payload, fails.
+
+
+def _probe(field: dict) -> object:
+    default = settings_store.ENV_DEFAULTS[field["name"]]
+    if field["type"] == "bool":
+        return not bool(default)
+    if field["type"] in ("int", "float"):
+        for bound in (field["lo"], field["hi"]):
+            if bound is not None and bound != default:
+                return bound
+        return default + 1
+    if field["choices"]:
+        return next(choice for choice in field["choices"] if choice != str(default))
+    if field["name"].startswith("llm_base_url"):
+        return "https://probe.example/v1"  # must clear the safe_base_url guard
+    return f"probe-{field['name']}"
+
+
+probes = {
+    name: _probe(field)
+    for name, field in settings_store.FIELDS.items()
+    if not field["secret"]
+}
+response = client.post("/api/settings", json={"values": probes, "clear_secrets": []})
+check("full-spec save accepted", response.status_code == 200, response.text[:200])
+not_exact = [n for n, value in probes.items() if getattr(settings, n) != value]
+check("every non-secret applies exactly (value and type)", not not_exact, str(not_exact))
+snapshot = client.get("/api/settings").json()
+read_back = {f["name"]: f.get("value") for g in snapshot["groups"] for f in g["fields"]}
+missing = [n for n in probes if n not in read_back]
+check("no spec field missing from the snapshot", not missing, str(missing))
+drifted = [n for n, value in probes.items() if read_back[n] != value]
+check("every saved value reads back exactly", not drifted, str(drifted))
+
+secret_probes = {
+    name: f"probe-{name}"
+    for name, field in settings_store.FIELDS.items()
+    if field["secret"]
+}
+client.post("/api/settings", json={"values": secret_probes, "clear_secrets": []})
+snapshot = client.get("/api/settings").json()
+secret_state = {f["name"]: f.get("configured") for g in snapshot["groups"] for f in g["fields"]}
+unconfigured = [n for n in secret_probes if secret_state.get(n) is not True]
+check("every secret saves and reports configured", not unconfigured, str(unconfigured))
+client.post("/api/settings/reset")
+not_restored = [n for n in probes if getattr(settings, n) != settings_store.ENV_DEFAULTS[n]]
+check("reset restores every field to its .env default", not not_restored, str(not_restored))
+print(f"full-spec round-trip OK ({len(probes)} non-secret + {len(secret_probes)} secret fields)")
+
 # ---- drive-by guard ----------------------------------------------------------
 
 check("loopback Host accepted", client.get("/api/health").status_code == 200)
