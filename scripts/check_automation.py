@@ -9,7 +9,7 @@ deterministic and key-less.
 import asyncio
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -36,6 +36,7 @@ from app.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import RunStatus, StockAnalysis  # noqa: E402
 from app.runs import store  # noqa: E402
+from app.tools import market_data  # noqa: E402
 
 FAKE_KEY = "PKCHECKKEY"
 FAKE_SECRET = "secret-check-value-must-never-leak"
@@ -45,6 +46,13 @@ REAL_CLIENT = broker._client
 REAL_DISCOVER = discovery.discover_stocks
 REAL_CACHED = discovery._cached_candidates
 REAL_STORE_CREATE = store.create
+REAL_BEAR = automation._bear_market
+REAL_CLOSES = market_data.get_closes_between
+REAL_HTTPX = automation.httpx
+
+
+async def _no_bear():
+    return None  # unknown -> the brake fails open
 
 
 def _use(fake):
@@ -56,6 +64,9 @@ def _restore():
     discovery.discover_stocks = REAL_DISCOVER
     discovery._cached_candidates = REAL_CACHED
     store.create = REAL_STORE_CREATE
+    automation._bear_market = REAL_BEAR
+    market_data.get_closes_between = REAL_CLOSES
+    automation.httpx = REAL_HTTPX
 
 
 class _FakeClient:
@@ -163,6 +174,7 @@ async def checks() -> None:
     await run_history.init()
     await broker.init()
     await automation.init()
+    automation._bear_market = _no_bear  # offline: no SPY fetch in these tests
 
     # ---- disabled by default; the toggle round-trips and persists ----------
     assert await automation.enabled() is False
@@ -348,6 +360,170 @@ async def checks() -> None:
     assert all(o.status == "rejected" and "exceed" in (o.error or "") for o in session.orders)
     settings.alpaca_max_order_usd = 10000.0
     print("rejected orders recorded, session survives OK")
+
+    # ---- P2.4: bear-market brake (BUYs brake, research and exits continue) --
+    async def _bear_true():
+        return True
+
+    # A fresh run id: autorun01 already carries active orders from the happy
+    # path, and the duplicate-open-order guard would reject the exit here.
+    await run_history.save(
+        RunStatus(
+            run_id="autorun03", tickers=list(results), status="completed",
+            started_at=0.0, duration_s=1.0, results=results,
+        ),
+        owner_id="automation_check",
+    )
+
+    async def _brake_run(tickers, client_id="", outlook="", depth=""):
+        return _FakeRun("autorun03", results)
+
+    automation._bear_market = _bear_true
+    store.create = _brake_run
+    fake = _FakeClient(
+        account=_raw_account(),
+        positions=[_raw_position("MSFT", "2000.00"), _raw_position("GOOG", "1500.00")],
+    )
+    _use(fake)
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error
+    braked = [o for o in session.orders if o.ticker == "NVDA"]
+    assert len(braked) == 1 and braked[0].status == "braked", session.orders
+    assert "200-day" in (braked[0].error or "")
+    assert [c.symbol for c in fake.submit_calls] == ["MSFT"], fake.submit_calls
+    automation._bear_market = _no_bear
+    store.create = _run_for
+    print("bear-market brake OK (BUY braked with reason, SELL exit still sent)")
+
+    # _bear_market itself: below/above the average, short history, dead feed
+    def _series(values):
+        base = date(2026, 1, 1)
+        return {(base + timedelta(days=i)).isoformat(): v for i, v in enumerate(values)}
+
+    async def _closes(values):
+        async def _fake(ticker, start, end):
+            assert ticker == "SPY"
+            return _series(values)
+
+        return _fake
+
+    async def _short_closes(ticker, start, end):
+        return _series([100.0] * 150)
+
+    async def _dead_closes(ticker, start, end):
+        raise RuntimeError("no data")
+
+    automation._bear_market = REAL_BEAR  # unit-test the real detector below
+    market_data.get_closes_between = await _closes([100.0] * 250 + [80.0])
+    assert await automation._bear_market() is True
+    market_data.get_closes_between = await _closes([100.0] * 250 + [130.0])
+    assert await automation._bear_market() is False
+    market_data.get_closes_between = _short_closes
+    assert await automation._bear_market() is None
+    market_data.get_closes_between = _dead_closes
+    assert await automation._bear_market() is None
+    market_data.get_closes_between = REAL_CLOSES
+    automation._bear_market = _no_bear
+    print("bear-market detection OK (below, above, short history and dead feed fail open)")
+
+    # ---- P2.4: portfolio budget cap + cash floor -----------------------------
+    await run_history.save(
+        RunStatus(
+            run_id="budgetrun", tickers=["XYZ"], status="completed",
+            started_at=0.0, duration_s=1.0, results={},
+        ),
+        owner_id="automation",
+    )
+    with broker._connect() as connection:
+        connection.execute(
+            "INSERT INTO broker_orders (client_order_id, run_id, ticker, side, "
+            "notional, status) VALUES ('bta-budget-1', 'budgetrun', 'XYZ', "
+            "'buy', 80000.0, 'filled')"
+        )
+        connection.execute(
+            "INSERT INTO broker_orders (client_order_id, run_id, ticker, side, "
+            "notional, status) VALUES ('bta-budget-2', 'budgetrun', 'OLD', "
+            "'sell', 10000.0, 'filled')"
+        )
+    # Manual runs (owner 'automation_check', like every earlier fake here) and
+    # unfilled exits must not move the number: 80k buy - 10k filled sell = 70k.
+    assert automation._automation_deployed() == 70000.0
+    settings.automation_max_deployed_pct = 0.5  # 50k cap on 100k equity
+    fake = _FakeClient(account=_raw_account(), positions=[])
+    _use(fake)
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error
+    budget = [o for o in session.orders if o.ticker == "NVDA"]
+    assert len(budget) == 1 and budget[0].status == "skipped", session.orders
+    assert "budget" in (budget[0].error or "")
+    assert fake.submit_calls == [], fake.submit_calls
+    settings.automation_max_deployed_pct = 1.0
+
+    settings.automation_cash_floor_pct = 0.6  # 60k floor, only 50k cash
+    session = await automation.run_session("schedule")
+    floor = [o for o in session.orders if o.ticker == "NVDA"]
+    assert len(floor) == 1 and floor[0].status == "skipped", session.orders
+    assert "cash floor" in (floor[0].error or "")
+    settings.automation_cash_floor_pct = 0.0
+    print("portfolio budget OK (own buys minus filled sells; cap and floor skip)")
+
+    # ---- P2.4: webhook - one plain-text POST per finished session ------------
+    webhook_posts = []
+
+    class _HookClient:
+        def __init__(self, timeout=None):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, content=None, headers=None):
+            webhook_posts.append((url, content, headers))
+
+    automation.httpx = SimpleNamespace(AsyncClient=_HookClient)
+    settings.webhook_url = "https://hooks.example/abc"
+
+    fake = _FakeClient(
+        account=_raw_account(),
+        clock=SimpleNamespace(is_open=False, next_open="tomorrow"),
+    )
+    _use(fake)
+    skipped = await automation.run_session("schedule")
+    assert skipped.status == "skipped" and webhook_posts == [], webhook_posts
+
+    fake = _FakeClient(
+        account=_raw_account(),
+        positions=[_raw_position("MSFT", "2000.00"), _raw_position("GOOG", "1500.00")],
+    )
+    _use(fake)
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error
+    assert len(webhook_posts) == 1, webhook_posts  # one POST, not one per order
+    url, body, headers = webhook_posts[0]
+    assert url == "https://hooks.example/abc"
+    assert headers["Content-Type"] == "text/plain"
+    assert isinstance(body, str) and "completed" in body and "NVDA=BUY" in body, body
+    webhook_posts.clear()
+
+    store.create = _crashing_run
+    session = await automation.run_session("schedule")
+    assert session.status == "failed"
+    assert len(webhook_posts) == 1 and "failed" in webhook_posts[0][1]
+    webhook_posts.clear()
+
+    class _RaisingHookClient(_HookClient):
+        async def post(self, url, content=None, headers=None):
+            raise RuntimeError("hook down")
+
+    automation.httpx = SimpleNamespace(AsyncClient=_RaisingHookClient)
+    store.create = _run_for
+    session = await automation.run_session("schedule")
+    assert session.status == "completed", session.error  # a dead hook never fails a session
+    settings.webhook_url = ""
+    print("webhook OK (one POST per finished session, plain text, failures tolerated)")
 
     # ---- stale 'running' rows settle honestly on init -----------------------
     stale_id = automation._insert_session("schedule", 0.0)

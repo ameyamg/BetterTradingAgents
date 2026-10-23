@@ -251,6 +251,20 @@ class Settings:
     automation_session_timeout_minutes: int = max(
         5, int(_env("AUTOMATION_SESSION_TIMEOUT_MINUTES", "40"))
     )
+    # Portfolio budget (wiki Roadmap P2.4): autopilot BUYs stop once the
+    # notional autopilot has deployed (its non-rejected buys minus its filled
+    # sells) passes this share of equity, and never take cash below the floor
+    # share of equity. 1.0 / 0.0 = today: only the global risk gate applies.
+    automation_max_deployed_pct: float = float(
+        _env("AUTOMATION_MAX_DEPLOYED_PCT", "1.0")
+    )
+    automation_cash_floor_pct: float = max(
+        0.0, float(_env("AUTOMATION_CASH_FLOOR_PCT", "0.0"))
+    )
+    # One plain-text POST to this URL per finished autopilot session
+    # (completed or failed); empty = off. Best-effort: a webhook failure
+    # never fails the session it reports on.
+    webhook_url: str = _env("WEBHOOK_URL")
 
     # Live reasoning stream (wiki Roadmap 3.2): stream agent tokens to the
     # UI as agent_token SSE events. OFF by default - in live use the stream is
