@@ -11,7 +11,6 @@ from app.agents import clamp_conf, clip, pick_signal
 from app.models import JudgeResult
 
 NAME = "judge"
-DISPLAY = "Debate Judge"
 
 
 def build_agent(llm):

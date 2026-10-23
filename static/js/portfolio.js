@@ -463,7 +463,7 @@ function sessionChip(status) {
 }
 
 function orderText(order) {
-  if (order.status === "skipped" || order.status === "rejected") {
+  if (order.status === "skipped" || order.status === "rejected" || order.status === "braked") {
     return `${order.side} ${order.ticker}: ${order.error || order.status}`;
   }
   return `${order.side === "buy" ? "Bought" : "Sold"} ${order.ticker} ${fmtUsd0(order.notional)} (${order.status})`;

@@ -39,6 +39,7 @@ from app.models import (
     BrokerStatus,
     EquityMark,
 )
+from app.db import connect as _connect
 
 logger = logging.getLogger("broker")
 
@@ -59,7 +60,6 @@ BROKER_RETRY_BACKOFF_S = 0.5
 # would have settled through refresh_order's 404 path on an earlier sweep.
 RECONCILE_WINDOW_DAYS = 7
 
-EQUITY_PERIODS = ("1W", "1M", "3M", "1A")
 
 
 class BrokerNotConfigured(ValueError):
@@ -361,10 +361,6 @@ async def init() -> None:
         )
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 # ---- local order rows ------------------------------------------------------

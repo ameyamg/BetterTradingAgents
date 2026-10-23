@@ -14,7 +14,6 @@ def _depth_value(value: object) -> object:
     return None if value is None else normalize_depth(value)
 
 Decision = Literal["BUY", "HOLD", "SELL"]
-Signal = Literal["bullish", "bearish", "neutral", "positive", "negative", "unknown"]
 
 
 class AgentResult(BaseModel):

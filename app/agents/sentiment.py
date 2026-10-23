@@ -7,12 +7,11 @@ and returned as low-confidence neutral instead of a signal (ROADMAP 3.1).
 
 import json
 
-from app.agents import clamp_conf, pick_signal, clip
+from app.agents import analyst_result
 from app.agents.news import _NEGATIVE_WORDS, _POSITIVE_WORDS
 from app.models import AgentResult
 
 NAME = "sentiment"
-DISPLAY = "Sentiment Analyst"
 
 # Below this many posts the crowd is too thin for the reading to mean anything.
 MIN_ITEMS = 3
@@ -57,12 +56,7 @@ Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
 
 
 def to_result(data: dict, ticker: str) -> AgentResult:
-    return AgentResult(
-        agent=NAME,
-        signal=pick_signal(data.get("signal")),
-        confidence=clamp_conf(data.get("confidence")),
-        summary=clip(data.get("summary", ""), 500),
-    )
+    return analyst_result(NAME, data)
 
 
 # The news word lists plus social-specific slang.

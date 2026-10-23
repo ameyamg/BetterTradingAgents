@@ -5,7 +5,7 @@ Analyst agent only interprets the results.
 """
 
 from math import exp, log
-from statistics import mean, pstdev
+from statistics import linear_regression, mean, pstdev
 
 
 def sma(values: list[float], window: int) -> float | None:
@@ -134,17 +134,13 @@ def historical_forecast(
 
     values = [log(price) for price in sample]
     count = len(values)
-    x_mean = (count - 1) / 2
+    slope, intercept = linear_regression(range(count), values)
+    fitted = [intercept + slope * x for x in range(count)]
     y_mean = mean(values)
-    denominator = sum((x - x_mean) ** 2 for x in range(count))
-    slope = sum(
-        (x - x_mean) * (value - y_mean) for x, value in enumerate(values)
-    ) / denominator
-    fitted = [y_mean + slope * (x - x_mean) for x in range(count)]
     residual = sum((actual - predicted) ** 2 for actual, predicted in zip(values, fitted))
     total = sum((value - y_mean) ** 2 for value in values)
     r_squared = max(0.0, min(1.0, 1 - residual / total)) if total else 0.0
-    forecast_price = exp(y_mean + slope * (count - 1 + horizon - x_mean))
+    forecast_price = exp(intercept + slope * (count - 1 + horizon))
 
     return {
         "forecast_price_5d": round(forecast_price, 2),

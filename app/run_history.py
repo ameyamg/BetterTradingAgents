@@ -6,18 +6,14 @@ import logging
 import sqlite3
 import time
 
-from app.config import settings
 from app.depth import DEFAULT_DEPTH, normalize_depth
 from app.models import RunHistoryItem, RunStatus, StockAnalysis
 from app.outlook import DEFAULT_OUTLOOK, normalize_outlook
+from app.db import connect as _connect
 
 logger = logging.getLogger("analysis")
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 def _init_db() -> None:

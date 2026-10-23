@@ -1,5 +1,7 @@
 """Shared helpers for the agent modules."""
 
+from app.models import AgentResult
+
 VALID_SIGNALS = {
     "bullish",
     "bearish",
@@ -34,6 +36,26 @@ def clip(text: str, limit: int) -> str:
     """Truncate to a limit, marking cuts with an ellipsis."""
     text = str(text or "").strip()
     return text if len(text) <= limit else text[:limit].rstrip() + "…"
+
+
+def analyst_result(name: str, data: dict) -> AgentResult:
+    """Result shape shared by the six researchers (signal + confidence)."""
+    return AgentResult(
+        agent=name,
+        signal=pick_signal(data.get("signal")),
+        confidence=clamp_conf(data.get("confidence")),
+        summary=clip(data.get("summary", ""), 500),
+    )
+
+
+def scored_result(name: str, signal: str, data: dict) -> AgentResult:
+    """Result shape shared by bull and bear: the payload is a debate score."""
+    return AgentResult(
+        agent=name,
+        signal=signal,
+        confidence=clamp_conf(data.get("score")),
+        summary=clip(data.get("summary", ""), 500),
+    )
 
 
 def first_sentence(text: str, max_len: int = 160) -> str:

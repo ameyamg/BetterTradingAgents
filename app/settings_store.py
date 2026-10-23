@@ -14,11 +14,11 @@ every override and restores the .env values captured at import.
 """
 
 import logging
-import sqlite3
 import time
 from typing import Any
 
 from app.config import safe_base_url, settings
+from app.db import connect as _connect
 
 logger = logging.getLogger("settings")
 
@@ -80,6 +80,8 @@ FIELD_GROUPS: list[dict[str, Any]] = [
             _field("llm_model", "LLM_MODEL", "Model", hint="Used by every role without an override", example="zai-org/GLM-5.3-Flash"),
             _field("llm_temperature", "LLM_TEMPERATURE", "Temperature", "float", lo=0.0, hi=2.0, hint="0 = steady, 1 = creative", example="0.2"),
             _field("llm_timeout_seconds", "LLM_TIMEOUT_SECONDS", "Timeout (seconds)", "float", lo=5, hi=600, hint="Per-request cap", example="90"),
+            _field("llm_max_tokens", "MAX_TOKENS", "Max tokens", "int", lo=0, hi=1000000, hint="Caps a runaway response; 0 = provider default", example="4000"),
+            _field("llm_max_retries", "LLM_MAX_RETRIES", "Retries", "int", lo=0, hi=10, hint="Waits and retries rate limits, server errors, malformed output; 0 = fail fast", example="2"),
             _field("llm_reasoning_effort", "LLM_REASONING_EFFORT", "Reasoning effort", hint="Provider-specific: none, low, medium, high (GLM uses none/low)", example="none"),
             _field("llm_price_in", "LLM_PRICE_IN", "Price in ($/1M tokens)", "float", lo=0, hi=10000, hint="0 = use the built-in list-price table", example="1.5"),
             _field("llm_price_out", "LLM_PRICE_OUT", "Price out ($/1M tokens)", "float", lo=0, hi=10000, hint="0 = use the built-in list-price table", example="6"),
@@ -119,7 +121,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
         "label": "Analysis limits",
         "fields": [
             _field("max_tickers", "MAX_TICKERS", "Max tickers", "int", lo=1, hi=20, hint="Tickers accepted in one analysis", example="5"),
-            _field("debate_rounds", "DEBATE_ROUNDS", "Debate rounds", "int", lo=1, hi=3, hint="2 or more adds one bull/bear rebuttal exchange", example="2"),
+            _field("debate_rounds", "DEBATE_ROUNDS", "Debate rounds", "int", lo=1, hi=3, hint="2 or more adds the debate judge", example="2"),
             _field("stream_reasoning", "STREAM_REASONING", "Stream agent tokens", "bool", hint="Live agent tokens in the run view"),
             _field("experimental_features", "EXPERIMENTAL_FEATURES", "Enable experimentation", "bool", hint="Shows the Experimentation tab with the retired-UI toggles"),
         ],
@@ -170,6 +172,9 @@ FIELD_GROUPS: list[dict[str, Any]] = [
             _field("automation_candidates", "AUTOMATION_CANDIDATES", "Candidates per session", "int", lo=1, hi=10, section="Schedule", hint="Shortlist size from the market scan", example="3"),
             _field("automation_candidate_cooldown_days", "AUTOMATION_CANDIDATE_COOLDOWN_DAYS", "Candidate cooldown (days)", "int", lo=0, hi=30, section="Schedule", hint="Names analyzed in the last N days rest, so picks rotate; 0 disables", example="3"),
             _field("automation_session_timeout_minutes", "AUTOMATION_SESSION_TIMEOUT_MINUTES", "Session timeout (minutes)", "int", lo=5, hi=240, section="Schedule", hint="Longer sessions are cancelled and recorded failed", example="40"),
+            _field("automation_max_deployed_pct", "AUTOMATION_MAX_DEPLOYED_PCT", "Budget (share of equity)", "float", lo=0.01, hi=1, section="Trading rules", hint="BUYs stop once autopilot's net deployed notional passes this share of equity", example="0.5 (= 50%)"),
+            _field("automation_cash_floor_pct", "AUTOMATION_CASH_FLOOR_PCT", "Cash floor (share of equity)", "float", lo=0, hi=1, section="Trading rules", hint="Autopilot BUYs never take cash below this share of equity", example="0.2 (= 20%)"),
+            _field("webhook_url", "WEBHOOK_URL", "Webhook URL", secret=True, section="Notifications", hint="One plain-text POST per finished session; empty = off", example="https://hooks.example.com/abc123"),
             _field("automation_min_confidence", "AUTOMATION_MIN_CONFIDENCE", "BUY confidence bar", "float", lo=0, hi=1, section="Trading rules", hint="BUYs below this are skipped; SELLs always act", example="0.65 (= 65%)"),
             _field("automation_outlook", "AUTOMATION_OUTLOOK", "Outlook", section="Trading rules", choices=("day_trade", "short_term", "long_term")),
             _field("automation_depth", "AUTOMATION_DEPTH", "Depth", section="Trading rules", choices=("fast", "pro", "max")),
@@ -264,10 +269,6 @@ def keychain_delete(name: str) -> None:
 # ---- local tables -----------------------------------------------------------
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 def _init_db() -> None:
@@ -456,6 +457,20 @@ def reset() -> None:
         keychain_delete(name)
     for name, value in ENV_DEFAULTS.items():
         setattr(settings, name, value)
+
+
+def flag_get(name: str) -> bool:
+    """A raw boolean flag row in user_settings (not a settings field, so
+    apply_overrides ignores it). UI state like the onboarding dismissal."""
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM user_settings WHERE key = ?", (name,)
+        ).fetchone()
+    return bool(row and row["value"] == "1")
+
+
+def flag_set(name: str, value: bool) -> None:
+    _db_set(name, "1" if value else "0")
 
 
 def snapshot() -> dict[str, Any]:

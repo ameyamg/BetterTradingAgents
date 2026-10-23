@@ -70,7 +70,7 @@ _MOCK_STREAM_DELAY = 0.025  # seconds between chunks
 _llms: dict[str, Any] = {}  # role -> CrewAI LLM (None in mock mode)
 _llm_roles_initialized: set[str] = set()
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
-_BACKOFF_SECONDS = (1.0, 4.0)  # HTTP 429/5xx: wait, retry, wait longer
+_BACKOFF_SECONDS = (1.0, 4.0, 16.0, 60.0)  # HTTP 429/5xx: wait, retry, wait longer
 
 
 # Model prefixes crewai routes itself; anything else (bare names and org/model
@@ -135,6 +135,7 @@ def _build_llm(
         api_key=conf["api_key"],
         temperature=settings.llm_temperature,
         timeout=settings.llm_timeout_seconds,
+        max_tokens=settings.llm_max_tokens or None,  # P2.18: 0 = provider default
         reasoning_effort=effort or None,
         stream=stream,
         additional_params=extra,
@@ -180,6 +181,28 @@ def get_chat_llm() -> Any:
         else:
             _llms["chat"] = None
     return _llms.get("chat")
+
+
+async def llm_ping() -> tuple[bool, str]:
+    """One-token live check of the configured LLM endpoint (P2.7 onboarding).
+    Builds a throwaway plain-text client so the cached role LLMs are never
+    touched, and caps the reply at a few tokens: the words are irrelevant,
+    only reachability is."""
+    if not settings.llm_configured:
+        return False, "no LLM API key saved yet"
+    try:
+        client = _build_llm("manager", json_mode=False, stream=False)
+    except Exception as exc:  # noqa: BLE001 - bad base_url etc.
+        return False, f"could not build the LLM client: {exc}"
+    client.max_tokens = 8
+    try:
+        reply = await asyncio.to_thread(
+            client.call,
+            [{"role": "user", "content": "Reply with the single word: ready"}],
+        )
+    except Exception as exc:  # noqa: BLE001 - any provider failure is the answer
+        return False, str(exc)[:300]
+    return True, str(reply)[:200]
 
 
 def _drop_json_mode(key: str) -> Any:
@@ -446,7 +469,8 @@ async def _run_agent(
             usage = {}
             last_error: Exception | None = None
             correction: str | None = None
-            for attempt in range(1, 4):
+            retries = settings.llm_max_retries  # P2.18: bound the retry budget
+            for attempt in range(1, retries + 2):
                 try:
                     agent = mod.build_agent(llm)
                     task = mod.build_task(agent, ticker, **task_payload)
@@ -496,19 +520,20 @@ async def _run_agent(
                         )
                         llm = replacement
                         continue
-                    if kind in ("rate_limit", "server") and attempt < 3:
-                        wait = _BACKOFF_SECONDS[min(attempt - 1, 1)]
+                    if kind in ("rate_limit", "server") and attempt < retries + 1:
+                        wait = _BACKOFF_SECONDS[min(attempt - 1, len(_BACKOFF_SECONDS) - 1)]
                         logger.warning(
-                            "[%s] %s error (%s); retry %d/2 in %.0fs",
+                            "[%s] %s error (%s); retry %d/%d in %.0fs",
                             agent_name,
                             kind,
                             detail,
                             attempt,
+                            retries,
                             wait,
                         )
                         await asyncio.sleep(wait)
                         continue
-                    if kind == "bad_output" and correction is None and attempt < 3:
+                    if kind == "bad_output" and correction is None and attempt < retries + 1:
                         logger.warning(
                             "[%s] malformed output (%s); retrying with the error fed back",
                             agent_name,
@@ -749,8 +774,8 @@ async def analyze_ticker(
     share it across tickers; when omitted it is fetched here. `outlook` is the
     user's chosen horizon (day_trade / short_term / long_term) and is injected
     into every agent payload so the whole crew weighs evidence for that horizon.
-    `depth` (fast / medium / expert) selects which researchers run and whether
-    the debate gets a rebuttal round - fewer agents, faster run. `run_id` tags
+    `depth` (fast / pro / max) selects which researchers run and whether
+    the debate judge cross-examines bull and bear - fewer agents, faster run. `run_id` tags
     the decision-memory row written at the end of a successful run.
     `market_data` injects a pre-built snapshot (backtests replay date T with
     only data known at T); `live_context=False` is the backtest mode: no

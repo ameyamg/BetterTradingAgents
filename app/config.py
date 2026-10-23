@@ -61,6 +61,11 @@ class Settings:
     llm_model: str = _env("LLM_MODEL", "gpt-6-luna")
     llm_temperature: float = float(_env("LLM_TEMPERATURE", "0.2"))
     llm_timeout_seconds: float = float(_env("LLM_TIMEOUT_SECONDS", "90"))
+    # P2.18 runaway bounds: max tokens forwarded to every provider (0 = let
+    # the provider default stand) and smart retries per LLM call after
+    # 429/5xx/malformed-output failures (0 = fail fast). Defaults = today.
+    llm_max_tokens: int = max(0, int(_env("MAX_TOKENS", "0")))
+    llm_max_retries: int = min(10, max(0, int(_env("LLM_MAX_RETRIES", "2"))))
     # Optional provider-specific reasoning effort (e.g. "none"/"low" for GLM).
     llm_reasoning_effort: str = _env("LLM_REASONING_EFFORT")
     llm_reasoning_effort_manager: str = _env("LLM_REASONING_EFFORT_MANAGER")
@@ -119,7 +124,7 @@ class Settings:
 
     # Analysis limits
     max_tickers: int = int(_env("MAX_TICKERS", "5"))
-    # 1 = single round; >= 2 adds one bull/bear rebuttal exchange (capped at 3).
+    # 1 = bull/bear only; >= 2 adds the debate judge cross-examination (capped at 3).
     debate_rounds: int = min(3, max(1, int(_env("DEBATE_ROUNDS", "2"))))
     # Wall-clock deadline for one analysis run (P2.8): a provider that hangs
     # must fail the run instead of leaving it "running" forever.
@@ -246,6 +251,20 @@ class Settings:
     automation_session_timeout_minutes: int = max(
         5, int(_env("AUTOMATION_SESSION_TIMEOUT_MINUTES", "40"))
     )
+    # Portfolio budget (wiki Roadmap P2.4): autopilot BUYs stop once the
+    # notional autopilot has deployed (its non-rejected buys minus its filled
+    # sells) passes this share of equity, and never take cash below the floor
+    # share of equity. 1.0 / 0.0 = today: only the global risk gate applies.
+    automation_max_deployed_pct: float = float(
+        _env("AUTOMATION_MAX_DEPLOYED_PCT", "1.0")
+    )
+    automation_cash_floor_pct: float = max(
+        0.0, float(_env("AUTOMATION_CASH_FLOOR_PCT", "0.0"))
+    )
+    # One plain-text POST to this URL per finished autopilot session
+    # (completed or failed); empty = off. Best-effort: a webhook failure
+    # never fails the session it reports on.
+    webhook_url: str = _env("WEBHOOK_URL")
 
     # Live reasoning stream (wiki Roadmap 3.2): stream agent tokens to the
     # UI as agent_token SSE events. OFF by default - in live use the stream is
