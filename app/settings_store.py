@@ -14,11 +14,11 @@ every override and restores the .env values captured at import.
 """
 
 import logging
-import sqlite3
 import time
 from typing import Any
 
 from app.config import safe_base_url, settings
+from app.db import connect as _connect
 
 logger = logging.getLogger("settings")
 
@@ -121,7 +121,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
         "label": "Analysis limits",
         "fields": [
             _field("max_tickers", "MAX_TICKERS", "Max tickers", "int", lo=1, hi=20, hint="Tickers accepted in one analysis", example="5"),
-            _field("debate_rounds", "DEBATE_ROUNDS", "Debate rounds", "int", lo=1, hi=3, hint="2 or more adds one bull/bear rebuttal exchange", example="2"),
+            _field("debate_rounds", "DEBATE_ROUNDS", "Debate rounds", "int", lo=1, hi=3, hint="2 or more adds the debate judge", example="2"),
             _field("stream_reasoning", "STREAM_REASONING", "Stream agent tokens", "bool", hint="Live agent tokens in the run view"),
             _field("experimental_features", "EXPERIMENTAL_FEATURES", "Enable experimentation", "bool", hint="Shows the Experimentation tab with the retired-UI toggles"),
         ],
@@ -269,10 +269,6 @@ def keychain_delete(name: str) -> None:
 # ---- local tables -----------------------------------------------------------
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 def _init_db() -> None:

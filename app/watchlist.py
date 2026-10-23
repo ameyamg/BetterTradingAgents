@@ -23,21 +23,17 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from app.changes import evidence_bucket
-from app.config import settings
 from app.depth import DEFAULT_DEPTH, normalize_depth
 from app.models import StockAnalysis, WatchlistCall, WatchlistItem
 from app.outlook import DEFAULT_OUTLOOK, normalize_outlook
 from app.tools.market_data import get_current_price
+from app.db import connect as _connect
 
 logger = logging.getLogger("watchlist")
 
 TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
 
-def _connect() -> sqlite3.Connection:
-    connection = sqlite3.connect(settings.db_path)
-    connection.row_factory = sqlite3.Row
-    return connection
 
 
 def _init_db() -> None:
