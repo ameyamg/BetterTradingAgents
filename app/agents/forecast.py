@@ -49,7 +49,7 @@ Precomputed forecast data (statistical model outputs calculated by Python - do N
 
 Two independent projections may be present:
 - hosted_forecast: zero-shot forecast from {_hosted_provider(payload)}. It is a statistical baseline - one input, never a target or a probability.
-- local_trend_forecast: log-linear trend fit over the last ~60 closes. Discount it when forecast_trend_r2 is below 0.25.
+- local_trend_forecast: a local ridge regression on the last ~120 closes of daily returns, fit directly for each step (method ridge_lag). Its out-of-sample skill is in forecast_trend_r2; discount it when that R2 is not positive. Old saved runs may instead carry a log-linear trend fit (method log_linear_trend), discounted when R2 is below 0.25.
 
 Judge whether the projected move is economically meaningful: compare forecast_change_5d_pct of the primary forecast (the hosted forecast wins when both exist) against noise_band_pct, which is already the +/-1 sigma {horizon}-day noise band for this stock. Quote that band - never volatility_annualized_pct, an annualized number is not a {horizon}-day band. A small projected move inside the band is noise, not a signal. Note whether the two models agree, and whether the projection direction fits the recent trend context (SMA position, 5d/21d changes). Your call covers the next {horizon} {session_word} only.
 
@@ -81,8 +81,15 @@ def mock(ticker: str, payload: dict) -> dict:
     noise = round(vol / (252**0.5) * (horizon**0.5), 2) if vol else None
 
     # Hosted forecasts (Bako/TimesFM) are authoritative with no trend R2
-    # attached; only the local fit needs a decent R2.
-    if method in ("log_linear_trend", "none") and (r2 is None or r2 < 0.25):
+    # attached. The local ridge model needs positive out-of-sample skill;
+    # the legacy log-linear fit keeps its old 0.25 bar for old saved runs.
+    if method == "none":
+        signal, confidence = "neutral", 0.4
+        detail = "unusable projection (none)"
+    elif method == "ridge_lag" and (r2 is None or r2 <= 0):
+        signal, confidence = "neutral", 0.4
+        detail = f"unusable projection ({method}, out-of-sample R2 {r2})"
+    elif method == "log_linear_trend" and (r2 is None or r2 < 0.25):
         signal, confidence = "neutral", 0.4
         detail = f"unusable projection ({method}, trend R2 {r2})"
     elif not change:

@@ -3,6 +3,7 @@
 import os
 import random
 import tempfile
+from math import exp
 from pathlib import Path
 
 # Isolated DB before app.config is imported.
@@ -39,11 +40,21 @@ m = macd(up)
 assert m and m["macd"] > 0 and m["macd_histogram"] > 0, "uptrend MACD should be positive"
 forecast = historical_forecast(up)
 assert forecast and forecast["forecast_price_5d"] > up[-1]
-assert forecast["forecast_change_5d_pct"] > 0 and forecast["forecast_trend_r2"] > 0.99
+assert forecast["forecast_change_5d_pct"] > 0
+assert len(forecast["forecast_path"]) == 5 and forecast["forecast_path"][-1] == forecast["forecast_price_5d"]
+# A perfect geometric series has constant returns, so return-prediction skill
+# is degenerate there. Skill shows on return structure: an accelerating trend
+# (quadratic in log price) makes each future return an exact linear function
+# of the last few returns at every point of the series, so a correct fit
+# scores ~1 out-of-sample. Real equities sit near zero, which is why the app
+# discounts non-positive skill instead of expecting it.
+accelerating = [100 * exp(0.003 * i + 0.00002 * i * i) for i in range(130)]
+assert historical_forecast(accelerating)["forecast_trend_r2"] > 0.9
 assert historical_forecast([1, 2, 3]) is None
 
 # Bako: rows are {date, price} calendar days from the prediction run date;
-# row horizon-1 wins. Bad payloads fall through to the next provider.
+# trading-day step k reads the row at calendar offset round(k * 365/252), so
+# a 5-day call reads row 7. Bad payloads fall through to the next provider.
 bako = _normalize_bako_forecast(
     {
         "symbol": "NVDA",
@@ -52,14 +63,15 @@ bako = _normalize_bako_forecast(
     100,
     5,
 )
-assert bako and bako["forecast_price_5d"] == 104
-assert bako["forecast_change_5d_pct"] == 4 and bako["forecast_method"] == "bako-timesfm"
+assert bako and bako["forecast_price_5d"] == 107
+assert bako["forecast_change_5d_pct"] == 7 and bako["forecast_method"] == "bako-timesfm"
 assert bako["forecast_horizon_days"] == 5
+assert bako["forecast_path"] == [101, 103, 104, 106, 107]
 assert _normalize_bako_forecast({}, 100, 5) is None
 assert _normalize_bako_forecast({"data": []}, 100, 5) is None
 assert _normalize_bako_forecast({"data": [{"price": 101}]}, 100, 5) is None  # too short
 assert _normalize_bako_forecast({"data": [{"date": "x"}] * 5}, 100, 5) is None  # no price
-print("Bako normalizer OK: horizon row, method tag, short/gap payloads")
+print("Bako normalizer OK: calendar-mapped rows, path, method tag, short/gap payloads")
 
 short = compute_indicators([1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [10] * 5)
 assert "macd" not in short and "atr_14" not in short and "bollinger_percent_b" not in short
@@ -199,9 +211,9 @@ assert forecast_agent._hosted_provider({}) == "the configured hosted provider"
 print("forecast provider label OK")
 
 # Outlook horizons: day trade grades the next session, short term five days,
-# long term about a month; the forecast mock scales its noise band to match.
+# long term about a quarter; the forecast mock scales its noise band to match.
 assert outlook_horizon("day_trade") == 1 and outlook_horizon("short_term") == 5
-assert outlook_horizon("long_term") == 21 and outlook_horizon("nonsense") == 5
+assert outlook_horizon("long_term") == 63 and outlook_horizon("nonsense") == 5
 _daily = historical_forecast(up, 1)
 _weekly = historical_forecast(up, 5)
 assert _daily["forecast_price_5d"] < _weekly["forecast_price_5d"]  # uptrend projects higher later
@@ -213,7 +225,7 @@ _fc_week = forecast_agent.mock("NVDA", {**_fc_payload,
                                         "hosted_forecast": {"forecast_change_5d_pct": -2.0,
                                                              "forecast_method": "bako-timesfm"}})
 assert _fc_week["signal"] == "neutral", _fc_week  # the same move is noise over 5 days
-print("outlook horizons OK: 1/5/21 days drive the forecast and its noise band")
+print("outlook horizons OK: 1/5/63 days drive the forecast and its noise band")
 
 # ---- workflow imports (catches syntax / import errors everywhere) ----------
 import app.main  # noqa: E402, F401

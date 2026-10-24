@@ -873,6 +873,10 @@ async def analyze_ticker(
             indicators.update(hosted_forecast)
             market.sources["forecast"] = "bako"
         else:
+            # Replace compute_indicators' default-5-day projection so the
+            # stored analysis matches the run's horizon when Bako is absent.
+            if local_forecast:
+                indicators.update(local_forecast)
             market.sources["forecast"] = "local"
     else:
         # "none" is filtered out of the UI's provider line.
@@ -1340,6 +1344,7 @@ async def analyze_ticker(
         forecast_trend_r2=indicators.get("forecast_trend_r2"),
         forecast_method=indicators.get("forecast_method", ""),
         forecast_horizon_days=indicators.get("forecast_horizon_days"),
+        forecast_path=indicators.get("forecast_path"),
         forecast_band_pct=None if forecast_band_pct is None else round(forecast_band_pct, 2),
         forecast_z=None if forecast_z_value is None else round(forecast_z_value, 2),
         decision=decision,

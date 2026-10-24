@@ -45,7 +45,8 @@ const REPORT_CSS = `
 function forecastHorizonLabel(analysis) {
   const horizon = Number(analysis.forecast_horizon_days) || 5;
   if (horizon === 1) return "Next-session forecast";
-  if (horizon >= 21) return "1-month forecast";
+  if (horizon >= 42) return "3-month forecast";
+  if (horizon >= 10) return "1-month forecast";
   return `${horizon}-day forecast`;
 }
 

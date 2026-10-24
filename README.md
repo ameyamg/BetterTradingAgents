@@ -41,7 +41,7 @@ Paper trading only. Research base: the
 | 🧪 | **Walk-forward backtests** | Replay past dates with point-in-time data, graded vs SPY after costs. |
 | ✅ | **Tested end to end** | 33 automated check groups plus a real-browser smoke; every setting round-trips exactly through the API and the web UI. |
 | 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
-| 📊 | **Real market data** | Finnhub, Olostep, yfinance; Bako (TimesFM) forecasts with a local trend fallback. |
+| 📊 | **Real market data** | Finnhub, Olostep, yfinance; Bako (TimesFM) forecasts at the run's horizon, with a local ridge-model fallback. |
 | 🧠 | **Model flexibility** | Any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama), per role or per agent, with automatic fallback when a provider rejects an output format. |
 | 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps, plus a deployment budget, bear-market brake, and session webhook. |
 | 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served by FastAPI. |
@@ -51,7 +51,7 @@ Paper trading only. Research base: the
 ```mermaid
 flowchart LR
     T["📈 Tickers<br/>up to five"] --> D["📡 Market data<br/>yfinance core · optional Finnhub / Olostep / Bako"]
-    D --> S["🔬 Researchers in parallel<br/>market · technical · fundamental · news<br/>sentiment (crowd proxy) · forecast (hosted → local trend)"]
+    D --> S["🔬 Researchers in parallel<br/>market · technical · fundamental · news<br/>sentiment (crowd proxy) · forecast (hosted → local ridge)"]
     S --> B["⚔️ Bull vs bear debate<br/>+ judge at Max · skipped at Fast"]
     B --> PM["👔 Portfolio Manager"]
     TR["📜 Every call graded vs SPY"] -.-> PM
@@ -110,7 +110,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `LLM_MODEL` | `gpt-6-luna` | Model for every role without an override |
 | `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
 | `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
-| `BAKO_API_KEY` | Not set | 5-day forecast (TimesFM via Bako); without it, a local trend fit on yfinance closes |
+| `BAKO_API_KEY` | Not set | Forecast for the run's outlook horizon (TimesFM via Bako); without it, a local ridge model on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |

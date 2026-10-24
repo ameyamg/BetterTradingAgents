@@ -179,9 +179,10 @@ class StockAnalysis(BaseModel):
     forecast_change_5d_pct: float | None = None
     forecast_trend_r2: float | None = None
     forecast_method: str = ""
-    forecast_horizon_days: int | None = None  # run outlook horizon: 1, 5, or 21 trading days
+    forecast_horizon_days: int | None = None  # run outlook horizon: 1, 5, or 63 trading days
     forecast_band_pct: float | None = None  # +/-1 sigma noise band for the run's horizon, in %
     forecast_z: float | None = None  # forecast change / noise band
+    forecast_path: list[float] | None = None  # per-step prices out to the horizon, for the chart
     decision: Decision = "HOLD"
     confidence: float = 0.0
     _bound_confidence = field_validator("confidence", mode="before")(

@@ -7,9 +7,10 @@ DEFAULT_OUTLOOK: Outlook = "short_term"
 
 # Forecast, risk-band, and grading horizon per outlook, in trading days: a
 # day trade is a next-session call, a swing call rides about a week, and a
-# long-term thesis about a month. Daily bars set the floor; sub-day
-# horizons would need intraday data.
-HORIZON_DAYS: dict[str, int] = {"day_trade": 1, "short_term": 5, "long_term": 21}
+# long-term thesis gets a quarter - the longest stretch the hosted model
+# serves (Bako caps its daily rows at ~100 calendar days). Daily bars set the
+# floor; sub-day horizons would need intraday data.
+HORIZON_DAYS: dict[str, int] = {"day_trade": 1, "short_term": 5, "long_term": 63}
 
 OUTLOOKS: dict[str, dict[str, str]] = {
     "day_trade": {

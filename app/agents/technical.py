@@ -33,7 +33,7 @@ def build_task(agent, ticker: str, payload: dict):
 Precomputed indicators (calculated by Python from 6 months of daily closes - do NOT recalculate or invent numbers):
 {json.dumps(payload, indent=2)}
 
-Weigh trend (price vs SMA20/SMA50, SMA20 vs SMA50), momentum (10d momentum, 21d/63d changes, MACD histogram), RSI (overbought >70, oversold <30), Bollinger position (percent_b near 1.0 = stretched upper band, near 0.0 = lower band), volatility and ATR, and volume confirmation (relative_volume >1.5 = unusual interest, check whether it supports or opposes the move). Treat forecast_price_5d as low-weight supporting evidence, not a guaranteed target or probability. When forecast_method is log_linear_trend, discount it if forecast_trend_r2 is below 0.25.
+Weigh trend (price vs SMA20/SMA50, SMA20 vs SMA50), momentum (10d momentum, 21d/63d changes, MACD histogram), RSI (overbought >70, oversold <30), Bollinger position (percent_b near 1.0 = stretched upper band, near 0.0 = lower band), volatility and ATR, and volume confirmation (relative_volume >1.5 = unusual interest, check whether it supports or opposes the move). Treat forecast_price_5d as low-weight supporting evidence, not a guaranteed target or probability. When forecast_method is ridge_lag, discount it if forecast_trend_r2 is not positive; when it is the legacy log_linear_trend, discount it below 0.25.
 
 Respond with ONLY a JSON object, no markdown fences, no text outside the JSON:
 {{"ticker": "{ticker}", "signal": "bullish" | "bearish" | "neutral", "confidence": <number 0.0-1.0>, "summary": "<at most 2 sentences citing the key numbers>"}}""",
@@ -63,11 +63,16 @@ def mock(ticker: str, payload: dict) -> dict:
     if (payload.get("macd_histogram") or 0) > 0:
         score += 0.5
     # Any hosted forecast counts (Bako/TimesFM, or timegpt-1 payloads saved
-    # by older versions); the local fit needs a decent trend R2.
+    # by older versions). The local ridge model needs positive out-of-sample
+    # skill; the legacy log-linear fit keeps its 0.25 trend-R2 bar.
     forecast_method = str(payload.get("forecast_method") or "")
-    forecast_usable = forecast_method.startswith(("timegpt-", "bako-")) or (
-        (payload.get("forecast_trend_r2") or 0) >= 0.25
-    )
+    r2 = payload.get("forecast_trend_r2") or 0
+    if forecast_method.startswith(("timegpt-", "bako-")):
+        forecast_usable = True
+    elif forecast_method == "ridge_lag":
+        forecast_usable = r2 > 0
+    else:
+        forecast_usable = r2 >= 0.25
     if forecast_usable:
         score += 0.5 if (payload.get("forecast_change_5d_pct") or 0) > 0 else -0.5
     rsi_value = payload.get("rsi_14")
