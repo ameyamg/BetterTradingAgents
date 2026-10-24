@@ -39,6 +39,10 @@ OLOSTEP_SCRAPE = "https://api.olostep.com/v1/scrapes"
 # https://api.bako.co/docs
 BAKO_PREDICTIONS = "https://api.bako.co/v1/predictions"
 CALENDAR_PER_TRADING_DAY = 365.0 / 252.0
+# Optional web-search links behind Olostep for the news fallback chain: same
+# job (search results mapped to news items), no article scraping.
+TAVILY_SEARCH = "https://api.tavily.com/search"
+FIRECRAWL_SEARCH = "https://api.firecrawl.dev/v1/search"
 
 _price_cache: dict[str, tuple[float, float]] = {}  # ticker -> (price, fetched_at)
 _CACHE_TTL = 60.0
@@ -109,18 +113,18 @@ async def get_stock_data(
 
     `forecast` (the hosted chain, called with the closes) starts the moment
     the price history lands instead of after the whole gather (ROADMAP P2.14);
-    its result rides back on MarketData.hosted_forecast. The Olostep news
-    fallback starts as soon as Finnhub comes back empty, overlapping the
-    remaining fetches instead of trailing the gather by up to its full
-    timeout. Same providers, same preference order - only the scheduling
-    changed.
+    its result rides back on MarketData.hosted_forecast. The web-search news
+    fallback (Olostep, then Tavily, then Firecrawl) starts as soon as Finnhub
+    comes back empty, overlapping the remaining fetches instead of trailing
+    the gather by up to its full timeout. Same providers, same preference
+    order - only the scheduling changed.
     """
     yf_task = asyncio.create_task(_yf_all(ticker))
     fundamentals_task = asyncio.create_task(_finnhub_fundamentals(ticker))
     news_task = asyncio.create_task(_finnhub_news(ticker))
     social_task = asyncio.create_task(_olostep_social(ticker))
     forecast_task: asyncio.Task | None = None
-    olostep_task: asyncio.Task | None = None
+    web_task: asyncio.Task | None = None
 
     yf_data = await yf_task
     if forecast is not None and yf_data["closes"]:
@@ -132,9 +136,9 @@ async def get_stock_data(
     finnhub_fund = await fundamentals_task
     company_name = finnhub_fund.pop("company_name", "") or yf_data["name"] or ticker
     if not finnhub_news:
-        olostep_task = asyncio.create_task(_olostep_news(ticker, company_name))
+        web_task = asyncio.create_task(_web_news(ticker, company_name))
     social = await social_task
-    olostep_news = await olostep_task if olostep_task else []
+    web_news, web_source = await web_task if web_task else ([], "")
     hosted = await forecast_task if forecast_task else None
 
     data = MarketData(ticker=ticker)
@@ -153,11 +157,11 @@ async def get_stock_data(
         "finnhub" if finnhub_fund else ("yfinance" if data.fundamentals else "none")
     )
 
-    # News: Finnhub -> Olostep search/scrape -> yfinance.
+    # News: Finnhub -> web search (Olostep, then Tavily, then Firecrawl) -> yfinance.
     if finnhub_news:
         data.news, data.sources["news"] = finnhub_news, "finnhub"
-    elif olostep_news:
-        data.news, data.sources["news"] = olostep_news, "olostep"
+    elif web_source:
+        data.news, data.sources["news"] = web_news, web_source
     else:
         data.news, data.sources["news"] = yf_data["news"], "yfinance"
     # Social sentiment posts (ROADMAP 3.1): Olostep site-restricted search;
@@ -627,6 +631,89 @@ def _olostep_links(payload: dict) -> list[dict]:
         except ValueError:
             return []
     return []
+
+
+def _news_items_from_rows(rows: list[dict], snippet_key: str) -> list[dict]:
+    """Map generic search rows ({title, url, <snippet_key>}) to news items."""
+    items = []
+    for row in rows:
+        url = _safe_http_url(str(row.get("url") or ""))
+        title = str(row.get("title") or "")
+        if not title or not url:
+            continue
+        items.append(
+            {
+                "title": title,
+                "source": urlparse(url).netloc.replace("www.", ""),
+                "published": "",
+                "summary": str(row.get(snippet_key) or "")[:300],
+                "url": url,
+            }
+        )
+    return items[:6]
+
+
+async def _tavily_news(ticker: str, company_name: str) -> list[dict]:
+    """News search via Tavily (search results only, no article scraping)."""
+    if not settings.tavily_api_key:
+        return []
+    query = f"{company_name or ticker} {ticker} stock news latest".strip()
+    try:
+        async with httpx.AsyncClient(timeout=OLOSTEP_TIMEOUT) as client:
+            response = await client.post(
+                TAVILY_SEARCH,
+                json={
+                    "api_key": settings.tavily_api_key,
+                    "query": query,
+                    "max_results": 6,
+                    "search_depth": "basic",
+                },
+            )
+            response.raise_for_status()
+            results = response.json().get("results")
+            return _news_items_from_rows(
+                results if isinstance(results, list) else [], "content"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[%s] tavily news failed: %s", ticker, exc)
+        return []
+
+
+async def _firecrawl_news(ticker: str, company_name: str) -> list[dict]:
+    """News search via Firecrawl (search results only, no article scraping)."""
+    if not settings.firecrawl_api_key:
+        return []
+    query = f"{company_name or ticker} {ticker} stock news latest".strip()
+    try:
+        async with httpx.AsyncClient(timeout=OLOSTEP_TIMEOUT) as client:
+            response = await client.post(
+                FIRECRAWL_SEARCH,
+                headers={"Authorization": f"Bearer {settings.firecrawl_api_key}"},
+                json={"query": query, "limit": 6},
+            )
+            response.raise_for_status()
+            rows = response.json().get("data")
+            return _news_items_from_rows(
+                rows if isinstance(rows, list) else [], "description"
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[%s] firecrawl news failed: %s", ticker, exc)
+        return []
+
+
+async def _web_news(ticker: str, company_name: str) -> tuple[list[dict], str]:
+    """The news fallback chain behind Finnhub: Olostep, then Tavily, then
+    Firecrawl. Returns (items, source); ("", "") when none is configured or
+    they all come back empty (yfinance news is the final fallback)."""
+    for source, fetch in (
+        ("olostep", _olostep_news),
+        ("tavily", _tavily_news),
+        ("firecrawl", _firecrawl_news),
+    ):
+        items = await fetch(ticker, company_name)
+        if items:
+            return items, source
+    return [], ""
 
 
 def _crowd_proxy(yf: dict) -> dict | None:

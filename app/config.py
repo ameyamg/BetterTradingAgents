@@ -114,6 +114,9 @@ class Settings:
     # Data providers
     finnhub_api_key: str = _env("FINNHUB_API_KEY")
     olostep_api_key: str = _env("OLOSTEP_API_KEY")
+    # Web-search fallbacks behind Olostep for the news chain (search only).
+    tavily_api_key: str = _env("TAVILY_API_KEY")
+    firecrawl_api_key: str = _env("FIRECRAWL_API_KEY")
     # Bako serves per-symbol ML price predictions (TimesFM via Vertex AI);
     # the hosted forecast in the chain (Bako, then the local trend model on
     # the yfinance closes). Free plan: 100 calls/day.
