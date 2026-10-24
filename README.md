@@ -117,6 +117,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
 | `TERMINAL_LOGGING` | `0` | `1` shows the full INFO log trail and uvicorn request lines in the terminal |
+| `APP_PORT` | `8000` | Port for `uv run app`; if busy, the next free port is used automatically |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |
 | `WEBHOOK_URL` | Not set | One plain-text POST per finished autopilot session |
 

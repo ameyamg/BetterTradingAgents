@@ -247,13 +247,26 @@ import app.main  # noqa: E402, F401
 
 print("app.main import OK")
 
-# The `uv run app` welcome banner: link + docs + commands must be present.
-from app.cli import APP_URL, WIKI_URL, startup_banner  # noqa: E402
+# The `uv run app` welcome banner: the ACTUAL port's link, docs, commands.
+from app.cli import WIKI_URL, app_url, pick_port, startup_banner  # noqa: E402
 
-_banner = startup_banner()
-assert APP_URL in _banner and WIKI_URL in _banner, _banner
+_banner = startup_banner(port=8123)
+assert app_url(8123) in _banner and WIKI_URL in _banner, _banner
 assert "uv run setup" in _banner and "uv run test" in _banner
-print("startup banner OK (app link, wiki link, setup/test commands)")
+print("startup banner OK (app link reflects the port, wiki link, setup/test commands)")
+
+# A busy port is skipped: pick_port returns a later free port in range.
+import socket as _socket  # noqa: E402
+
+_probe = _socket.socket()
+_probe.bind(("127.0.0.1", 0))
+_busy_port = _probe.getsockname()[1]
+_probe.listen(1)
+_chosen = pick_port(_busy_port)
+_probe.close()
+assert _busy_port < _chosen <= _busy_port + 20, (_busy_port, _chosen)
+assert app_url(_chosen).endswith(str(_chosen))
+print(f"port pick OK (busy {_busy_port} -> {_chosen})")
 
 # The crewai per-call token-estimate warning stays silenced (importing
 # app.main pulls in workflow, which sets the level).

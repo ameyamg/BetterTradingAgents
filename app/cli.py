@@ -9,6 +9,7 @@
 """
 
 import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -43,10 +44,34 @@ APP_URL = "http://127.0.0.1:8000"
 WIKI_URL = "https://github.com/kingabzpro/BetterTradingAgents/wiki"
 
 
-def startup_banner() -> str:
+def app_url(port: int) -> str:
+    return f"http://127.0.0.1:{port}"
+
+
+def _port_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def pick_port(preferred: int, attempts: int = 20) -> int:
+    """The preferred port when free, else the next free one; the preferred
+    port itself when everything in the range is taken, so uvicorn surfaces
+    the bind failure instead of the app failing silently."""
+    for candidate in range(preferred, min(preferred + attempts, 65536)):
+        if _port_free(candidate):
+            return candidate
+    return preferred
+
+
+def startup_banner(port: int = 8000) -> str:
     """Welcome block printed by `uv run app`. With the terminal quiet by
     default (TERMINAL_LOGGING=0) this is the one thing a user sees at
-    startup, so it carries the link, the docs, and the log hint."""
+    startup, so it carries the actual link (the port the app really got),
+    the docs, and the log hint."""
     color = (
         not os.environ.get("NO_COLOR")
         and (os.environ.get("BTA_WIZARD_COLOR") == "1" or sys.stdout.isatty())
@@ -63,7 +88,7 @@ def startup_banner() -> str:
         f"{green}{bold}  BetterTradingAgents{reset}"
         f"{dim} - multi-agent stock research and paper trading{reset}\n"
         f"{rule}  ──────────────────────────────────────────────────────{reset}\n\n"
-        f"{label}  App   {reset}  {link}{APP_URL}{reset}\n"
+        f"{label}  App   {reset}  {link}{app_url(port)}{reset}\n"
         f"{label}  Docs  {reset}  {link}{WIKI_URL}{reset}\n"
         f"{label}  Setup {reset}  {dim}uv run setup{reset}"
         f"{label}     Tests {reset}  {dim}uv run test{reset}\n\n"
@@ -73,7 +98,8 @@ def startup_banner() -> str:
 
 
 def serve() -> int:
-    """Entry point for `uv run app`: start the server on port 8000.
+    """Entry point for `uv run app`: start the server on APP_PORT (default
+    8000), automatically bumping to the next free port when it is taken.
 
     No auto-reload: uvicorn's reload worker spawns the base interpreter and
     has served stale code silently after code changes (twice). A plain
@@ -84,13 +110,20 @@ def serve() -> int:
 
     from app.config import settings
 
-    print(startup_banner())
+    port = pick_port(settings.app_port)
+    print(startup_banner(port))
+    if port != settings.app_port:
+        print(
+            f"  \033[33mPort {settings.app_port} is busy; serving on {port} instead.\033[0m"
+            if not os.environ.get("NO_COLOR")
+            else f"  Port {settings.app_port} is busy; serving on {port} instead."
+        )
     # Terminal stays quiet by default (TERMINAL_LOGGING=1 in .env for the
     # INFO trail and per-request access lines).
     uvicorn.run(
         "app.main:app",
         host="127.0.0.1",
-        port=8000,
+        port=port,
         log_level="info" if settings.terminal_logging else "warning",
         access_log=settings.terminal_logging,
     )
