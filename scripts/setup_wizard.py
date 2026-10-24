@@ -84,7 +84,7 @@ def header(step: int, total: int, title: str) -> None:
 PROVIDERS = [
     {"key": "openai", "label": "OpenAI", "base_url": "https://api.openai.com/v1", "model": "gpt-6-luna"},
     {"key": "zai", "label": "Z.AI (GLM)", "base_url": "https://api.z.ai/api/paas/v4", "model": "glm-5.3-flash"},
-    {"key": "deepseek", "label": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-v4-flash"},
+    {"key": "deepseek", "label": "DeepSeek", "base_url": "https://api.deepseek.com/v1", "model": "deepseek-flash"},
     {"key": "openrouter", "label": "OpenRouter (many models, one key)", "base_url": "https://openrouter.ai/api/v1", "model": "zai-org/glm-5.3-flash"},
     {"key": "custom", "label": "Any other OpenAI-compatible endpoint (vLLM, llama.cpp, proxy...)", "base_url": "", "model": ""},
 ]

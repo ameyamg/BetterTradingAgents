@@ -20,24 +20,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # accounting, the cost estimate, durable history, and the setup wizard.
 FAST_CHECKS = ("quick_wins", "cost", "run_history", "changes", "ui", "accuracy", "watchlist", "search_export", "paper_trading", "setup_wizard")
 
-# The green butterfly (the project logo) as terminal art; shown by `uv run app`.
+# The green butterfly (the project logo) as small terminal art; shown by
+# `uv run app`. Compact on purpose: the banner must fit one glance.
 _BUTTERFLY = r"""
-      \  /                \  /
-    .==. \\.            .// .==.
-   //  \\  \\          //  //  \\
-   \\   \\  \\        //  //   //
-    \\   \\. '.      .' ./   //
-     '=._  '. \.  ./ .'  _.='
-         \''. '.||.' .'/''
-          |   \ || /   |
-          |    \||/    |
-          |     ||     |
-          |     ||     |
-         .'     ||     '.
-        /   .--'||'--.   \
-       /   /    ||    \   \
-      '--'     /||\     '--'
-              '.'  '.'
+  \  /
+ .-\/-.
+(  ||  )
+ \ || /
+ /_||_\
+  `'`'
 """
 
 APP_URL = "http://127.0.0.1:8000"
