@@ -71,7 +71,7 @@ You need [Python 3.12+](https://www.python.org/) and [uv](https://docs.astral.sh
 git clone https://github.com/kingabzpro/BetterTradingAgents.git
 cd BetterTradingAgents
 uv sync        # install dependencies
-uv run setup   # arrow-key wizard: pick providers, every key tested live before it saves
+uv run setup   # arrow-key wizard: LLM + paper account live-tested, other keys format-checked
 uv run app     # start the app on http://127.0.0.1:8000
 ```
 

@@ -393,7 +393,7 @@ def step_llm(ui: Any, tests: dict[str, Callable[..., tuple[bool, str]]], state: 
                 state.pending.update(
                     {"llm_base_url": base_url, "llm_model": model, "llm_api_key": key}
                 )
-                state.mark("llm", "ok", f"{preset['label']} / {model}")
+                state.mark("llm", "ok", f"{provider_label(base_url)} / {model}")
                 return
             print(fail(detail))
             action = ui.select(
