@@ -22,7 +22,7 @@
       { name: "finnhub_api_key", label: "Finnhub", placeholder: "optional", secret: true },
       { name: "olostep_api_key", label: "Olostep", placeholder: "optional", secret: true },
       { name: "nixtla_api_key", label: "TimeGPT", placeholder: "optional", secret: true },
-      { name: "tsfm_api_key", label: "TSFM.ai", placeholder: "optional", secret: true },
+      { name: "bako_api_key", label: "Bako", placeholder: "optional", secret: true },
     ],
   };
   const VALIDATE = { llm: "/api/onboarding/validate/llm", alpaca: "/api/onboarding/validate/alpaca" };

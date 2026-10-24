@@ -10,7 +10,7 @@ _TMP = Path(tempfile.mkdtemp()) / "portfolio_test.db"
 os.environ["DB_PATH"] = str(_TMP)
 
 from app.tools.indicators import compute_indicators, historical_forecast, macd  # noqa: E402
-from app.tools.market_data import _normalize_timegpt_forecast, _normalize_tsfm_forecast  # noqa: E402
+from app.tools.market_data import _normalize_bako_forecast, _normalize_timegpt_forecast  # noqa: E402
 from app.outlook import horizon_days as outlook_horizon  # noqa: E402
 from app import discovery  # noqa: E402
 from app.discovery import rank_candidates  # noqa: E402
@@ -45,43 +45,24 @@ timegpt = _normalize_timegpt_forecast({"mean": [101, 102, 103, 104, 105]}, 100, 
 assert timegpt and timegpt["forecast_price_5d"] == 105
 assert timegpt["forecast_change_5d_pct"] == 5 and timegpt["forecast_method"] == "timegpt-1"
 
-# TSFM.ai (Chronos-2): median quantile wins; [[value], ...] rows; bad
-# payloads fall through to the next provider instead of raising.
-tsfm = _normalize_tsfm_forecast(
+# Bako: rows are {date, price} calendar days from the prediction run date;
+# row horizon-1 wins. Bad payloads fall through to the next provider.
+bako = _normalize_bako_forecast(
     {
-        "model": "amazon/chronos-2",
-        "outputs": [
-            {
-                "mean": [[101], [102], [103], [104], [105]],
-                "quantile_predictions": [
-                    {"level": 0.1, "values": [[99], [100], [101], [102], [103]]},
-                    {"level": 0.5, "values": [[102], [102], [103], [104], [106]]},
-                    {"level": 0.9, "values": [[103], [104], [105], [106], [109]]},
-                ],
-            }
-        ],
+        "symbol": "NVDA",
+        "data": [{"date": f"2026-10-{2 + i}", "price": 100 + i} for i in range(8)],
     },
     100,
     5,
 )
-assert tsfm and tsfm["forecast_price_5d"] == 106
-assert tsfm["forecast_change_5d_pct"] == 6 and tsfm["forecast_method"] == "tsfm-chronos-2"
-assert tsfm["forecast_horizon_days"] == 5
-# No 0.5 level: the middle quantile stands in; no quantiles at all: mean.
-middle = _normalize_tsfm_forecast(
-    {"outputs": [{"quantile_predictions": [
-        {"level": 0.2, "values": [[99]]}, {"level": 0.8, "values": [[104]]},
-    ]}]},
-    100,
-    1,
-)
-assert middle and middle["forecast_price_5d"] == 104
-mean_only = _normalize_tsfm_forecast({"outputs": [{"mean": [[101], [103]]}]}, 100, 2)
-assert mean_only and mean_only["forecast_price_5d"] == 103
-assert _normalize_tsfm_forecast({}, 100, 5) is None
-assert _normalize_tsfm_forecast({"outputs": []}, 100, 5) is None
-assert _normalize_tsfm_forecast({"outputs": [{"mean": [[101]]}]}, 100, 5) is None  # too short
-print("TSFM normalizer OK: median quantile, middle fallback, mean fallback, gaps")
+assert bako and bako["forecast_price_5d"] == 104
+assert bako["forecast_change_5d_pct"] == 4 and bako["forecast_method"] == "bako-timesfm"
+assert bako["forecast_horizon_days"] == 5
+assert _normalize_bako_forecast({}, 100, 5) is None
+assert _normalize_bako_forecast({"data": []}, 100, 5) is None
+assert _normalize_bako_forecast({"data": [{"price": 101}]}, 100, 5) is None  # too short
+assert _normalize_bako_forecast({"data": [{"date": "x"}] * 5}, 100, 5) is None  # no price
+print("Bako normalizer OK: horizon row, method tag, short/gap payloads")
 
 short = compute_indicators([1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [10] * 5)
 assert "macd" not in short and "atr_14" not in short and "bollinger_percent_b" not in short
@@ -216,7 +197,7 @@ print("forecast mock OK:", _fc["signal"], _fc["confidence"])
 
 # The analyst names the actual provider in its prompt, never a hardcoded one.
 assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "timegpt-1"}}) == "Nixtla TimeGPT"
-assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "tsfm-chronos-2"}}) == "TSFM.ai chronos-2"
+assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "bako-timesfm"}}) == "Bako (TimesFM)"
 assert forecast_agent._hosted_provider({}) == "the configured hosted provider"
 print("forecast provider label OK")
 
@@ -229,11 +210,11 @@ _weekly = historical_forecast(up, 5)
 assert _daily["forecast_price_5d"] < _weekly["forecast_price_5d"]  # uptrend projects higher later
 _fc_day = forecast_agent.mock("NVDA", {**_fc_payload, "horizon_days": 1,
                                        "hosted_forecast": {"forecast_change_5d_pct": -2.0,
-                                                            "forecast_method": "tsfm-chronos-2"}})
+                                                            "forecast_method": "bako-timesfm"}})
 assert _fc_day["signal"] == "bearish", _fc_day  # -2% clears the ~1.3% 1-day band
 _fc_week = forecast_agent.mock("NVDA", {**_fc_payload,
                                         "hosted_forecast": {"forecast_change_5d_pct": -2.0,
-                                                             "forecast_method": "tsfm-chronos-2"}})
+                                                             "forecast_method": "bako-timesfm"}})
 assert _fc_week["signal"] == "neutral", _fc_week  # the same move is noise over 5 days
 print("outlook horizons OK: 1/5/21 days drive the forecast and its noise band")
 

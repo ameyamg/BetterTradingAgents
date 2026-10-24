@@ -219,10 +219,10 @@ async def _onboarding_payload() -> dict:
             "label": "Market-data provider keys",
             "configured": any(
                 getattr(settings, name)
-                for name in ("finnhub_api_key", "olostep_api_key", "nixtla_api_key", "tsfm_api_key")
+                for name in ("finnhub_api_key", "olostep_api_key", "nixtla_api_key", "bako_api_key")
             ),
             "optional": True,
-            "hint": "Finnhub, Olostep, TimeGPT, TSFM.ai; each degrades to yfinance",
+            "hint": "Finnhub, Olostep, TimeGPT, Bako; each degrades to yfinance",
         },
     ]
     preflight = [
@@ -310,7 +310,7 @@ async def health():
             "fundamentals": "finnhub" if settings.finnhub_api_key else "yfinance",
             "news_search": "olostep" if settings.olostep_api_key else "disabled",
             "social": "olostep" if settings.olostep_api_key else "disabled",
-            "forecast": ("timegpt" if settings.nixtla_api_key else "tsfm" if settings.tsfm_api_key else "local"),
+            "forecast": ("timegpt" if settings.nixtla_api_key else "bako" if settings.bako_api_key else "local"),
         },
         "max_tickers": settings.max_tickers,
         "debate_rounds": settings.debate_rounds,

@@ -105,7 +105,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
 | `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
 | `NIXTLA_API_KEY` | Not set | 5-day forecast (TimeGPT) |
-| `TSFM_API_KEY` | Not set | 5-day forecast (Chronos-2) when TimeGPT is down |
+| `BAKO_API_KEY` | Not set | 5-day forecast (TimesFM via Bako) when TimeGPT is down |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |

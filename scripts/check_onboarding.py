@@ -21,7 +21,7 @@ for _var in (
     "FINNHUB_API_KEY",
     "OLOSTEP_API_KEY",
     "NIXTLA_API_KEY",
-    "TSFM_API_KEY",
+    "BAKO_API_KEY",
     "ALPACA_API_KEY_ID",
     "ALPACA_API_KEY",
     "ALPACA_SECRET_KEY",

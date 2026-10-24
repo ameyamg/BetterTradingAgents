@@ -171,7 +171,7 @@ function forecastHorizonLabel(analysis) {
 
 function forecastMethodLabel(analysis) {
   if (analysis.forecast_method === "timegpt-1") return "TimeGPT";
-  if (String(analysis.forecast_method || "").startsWith("tsfm-")) return "Chronos-2 via TSFM";
+  if (String(analysis.forecast_method || "").startsWith("bako-")) return "TimesFM via Bako";
   if (analysis.forecast_trend_r2 != null) return `Local fit R² ${Number(analysis.forecast_trend_r2).toFixed(2)}`;
   return "Local";
 }

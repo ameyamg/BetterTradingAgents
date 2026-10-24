@@ -32,10 +32,10 @@ FINNHUB_BASE = "https://finnhub.io/api/v1"
 OLOSTEP_SEARCH = "https://api.olostep.com/v1/searches"
 OLOSTEP_SCRAPE = "https://api.olostep.com/v1/scrapes"
 TIMEGPT_FORECAST = "https://api.nixtla.io/v2/forecast"
-TSFM_FORECAST = "https://api.tsfm.ai/v1/forecast"
-# Chronos-2 is TSFM.ai's flagship forecaster (quantile-native); the model
-# catalog is discoverable at https://api.tsfm.ai/api/models.
-TSFM_MODEL = "amazon/chronos-2"
+# Bako serves daily ML price predictions per symbol (TimesFM on Vertex AI
+# plus a TF.js model, refreshed every day); free plan is 100 calls/day.
+# https://api.bako.co/docs
+BAKO_PREDICTIONS = "https://api.bako.co/v1/predictions"
 
 _price_cache: dict[str, tuple[float, float]] = {}  # ticker -> (price, fetched_at)
 _CACHE_TTL = 60.0
@@ -274,46 +274,43 @@ async def get_timegpt_forecast(
         return None
 
 
-async def get_tsfm_forecast(
-    closes: list[float], horizon: int = 5
+async def get_bako_forecast(
+    ticker: str, horizon: int = 5, current_price: float | None = None
 ) -> dict | None:
-    """Ask TSFM.ai (Chronos-2) for a zero-shot forecast; None for the fallback."""
-    if not settings.tsfm_api_key or horizon < 1 or len(closes) < 30:
+    """Ask Bako for its per-symbol price predictions; None for the fallback.
+
+    Unlike the series-based links, Bako is keyed on the ticker alone: it
+    serves precomputed daily predictions (up to 100 days), so the closes and
+    the forecast hook's overlap are irrelevant here - only the current price
+    (for the change percent) and the horizon row matter.
+    """
+    if not settings.bako_api_key or horizon < 1 or not ticker or not current_price:
         return None
-    sample = closes[-512:]
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                TSFM_FORECAST,
-                headers={"Authorization": f"Bearer {settings.tsfm_api_key}"},
-                json={
-                    "model": TSFM_MODEL,
-                    # Canonical TSFM.ai shape: univariate targets are rows of
-                    # [value], so the payload moves between their SDKs unchanged.
-                    "inputs": [{"target": [[value] for value in sample]}],
-                    "parameters": {
-                        "prediction_length": horizon,
-                        "frequency": "D",
-                        "quantile_levels": [0.1, 0.5, 0.9],
-                    },
-                },
+            response = await client.get(
+                BAKO_PREDICTIONS,
+                headers={"api-key": settings.bako_api_key},
+                params={"symbol": ticker},
             )
             response.raise_for_status()
-            return _normalize_tsfm_forecast(response.json(), closes[-1], horizon)
+            return _normalize_bako_forecast(response.json(), current_price, horizon)
     except Exception as exc:  # noqa: BLE001 - provider failure must degrade gracefully
-        logger.warning("TSFM forecast failed: %s", exc)
+        logger.warning("Bako forecast failed: %s", exc)
         return None
 
 
 async def get_hosted_forecast(
-    closes: list[float], horizon: int = 5
+    closes: list[float], horizon: int = 5, ticker: str = ""
 ) -> dict | None:
-    """The hosted forecast chain: TimeGPT while its quota allows, then TSFM.ai
-    (Chronos-2). None sends the caller to its local fallback; any provider
-    failure degrades silently to the next link."""
+    """The hosted forecast chain: TimeGPT while its quota allows, then Bako
+    (needs the ticker). None sends the caller to its local fallback; any
+    provider failure degrades silently to the next link."""
     hosted = await get_timegpt_forecast(closes, horizon)
     if hosted is None:
-        hosted = await get_tsfm_forecast(closes, horizon)
+        hosted = await get_bako_forecast(
+            ticker, horizon, closes[-1] if closes else None
+        )
     return hosted
 
 
@@ -340,49 +337,36 @@ def _normalize_timegpt_forecast(
     }
 
 
-def _normalize_tsfm_forecast(
+def _normalize_bako_forecast(
     payload: dict, current_price: float, horizon: int
 ) -> dict | None:
-    """Map a TSFM.ai response onto the app's forecast fields.
+    """Map a Bako /v1/predictions response onto the app's forecast fields.
 
-    Prefers the median quantile path (level 0.5), falls back to the middle
-    quantile and then the mean; paths are rows of [value] per the canonical
-    response. The +/- band stays volatility-derived (risk.forecast_noise_pct)
-    exactly like every other provider, so the risk-gate math is untouched.
+    Rows are {date, price} calendar days starting at the prediction run date,
+    so row `horizon - 1` mirrors the step index the other providers use. Bako
+    is point-only: the +/- band stays volatility-derived
+    (risk.forecast_noise_pct) exactly like every other provider, so the
+    risk-gate math is untouched.
     """
-    outputs = payload.get("outputs")
-    if not isinstance(outputs, list) or not outputs:
+    rows = payload.get("data")
+    if not isinstance(rows, list) or len(rows) < horizon:
         return None
-    output = outputs[0]
-    if not isinstance(output, dict):
+    point = rows[horizon - 1]
+    if not isinstance(point, dict):
         return None
-    path = None
-    quantiles = output.get("quantile_predictions")
-    if isinstance(quantiles, list) and quantiles:
-        entries = [e for e in quantiles if isinstance(e, dict) and isinstance(e.get("values"), list)]
-        pick = next((e for e in entries if e.get("level") == 0.5), entries[len(entries) // 2] if entries else None)
-        if pick is not None:
-            path = pick["values"]
-    if path is None:
-        path = output.get("mean")
-    if not isinstance(path, list) or len(path) < horizon:
+    price = point.get("price")
+    if not isinstance(price, (int, float)) or not isfinite(float(price)):
         return None
-    point = path[horizon - 1]
-    if isinstance(point, list):
-        point = point[0] if point else None
-    if not isinstance(point, (int, float)) or not isfinite(float(point)):
-        return None
-    price = float(point)
+    price = float(price)
     if current_price <= 0 or price <= 0:
         return None
-    model_id = str(payload.get("model") or TSFM_MODEL)
     return {
         "forecast_price_5d": round(price, 2),
         "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
         "forecast_trend_r2": None,
         "forecast_window_days": None,
         "forecast_horizon_days": horizon,
-        "forecast_method": f"tsfm-{model_id.rsplit('/', 1)[-1]}",
+        "forecast_method": "bako-timesfm",
     }
 
 

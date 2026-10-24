@@ -15,7 +15,7 @@ from pathlib import Path
 os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "run_speed_test.db")
 os.environ["LLM_API_KEY"] = ""
 os.environ["NIXTLA_API_KEY"] = ""
-os.environ["TSFM_API_KEY"] = ""
+os.environ["BAKO_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
 

@@ -143,7 +143,7 @@ async def run_backtest(
         workflow._llms.clear()
         workflow._llm_roles_initialized.clear()
     settings.nixtla_api_key = ""  # no paid forecasts inside a backtest
-    settings.tsfm_api_key = ""
+    settings.bako_api_key = ""
 
     profile = depth_profile(depth)
     exclusions = tuple(exclude_analysts)

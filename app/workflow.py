@@ -824,7 +824,7 @@ async def analyze_ticker(
     # price history lands inside get_stock_data instead of after the whole
     # gather (ROADMAP P2.14).
     forecast_hook = (
-        (lambda closes: get_hosted_forecast(closes, run_horizon))
+        (lambda closes: get_hosted_forecast(closes, run_horizon, ticker))
         if "forecast" in research
         else None
     )
@@ -866,11 +866,13 @@ async def analyze_ticker(
             # the hosted chain runs here on the replayed closes. Any failure
             # falls through; the payload key keeps its historical name for
             # saved-run parity.
-            hosted_forecast = await get_hosted_forecast(market.closes, run_horizon)
+            hosted_forecast = await get_hosted_forecast(
+                market.closes, run_horizon, ticker
+            )
         if hosted_forecast:
             indicators.update(hosted_forecast)
             market.sources["forecast"] = (
-                "timegpt" if hosted_forecast["forecast_method"] == "timegpt-1" else "tsfm"
+                "timegpt" if hosted_forecast["forecast_method"] == "timegpt-1" else "bako"
             )
         else:
             market.sources["forecast"] = "local"
