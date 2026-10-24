@@ -63,17 +63,18 @@ def startup_banner(port: int = 8000) -> str:
         reset = "\033[0m"
     else:
         green = bold = dim = label = link = rule = reset = ""
+    rule_bar = "─" * 68
     return (
-        f"\n{rule}  ──────────────────────────────────────────────────────{reset}\n"
+        f"\n{rule}  {rule_bar}{reset}\n"
         f"{green}{bold}  BetterTradingAgents{reset}"
         f"{dim} - multi-agent stock research and paper trading{reset}\n"
-        f"{rule}  ──────────────────────────────────────────────────────{reset}\n\n"
+        f"{rule}  {rule_bar}{reset}\n\n"
         f"{label}  App   {reset}  {link}{app_url(port)}{reset}\n"
         f"{label}  Docs  {reset}  {link}{WIKI_URL}{reset}\n"
         f"{label}  Setup {reset}  {dim}uv run setup{reset}"
         f"{label}     Tests {reset}  {dim}uv run test{reset}\n\n"
-        f"{dim}  Ctrl+C stops the server. Terminal logs stay quiet;"
-        f" set TERMINAL_LOGGING=1 to see them.{reset}\n"
+        f"{dim}  Ctrl+C stops the server.{reset}\n"
+        f"{dim}  Set TERMINAL_LOGGING=1 in .env for the full log trail.{reset}\n"
     )
 
 

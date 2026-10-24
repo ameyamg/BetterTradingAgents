@@ -253,7 +253,13 @@ from app.cli import WIKI_URL, app_url, pick_port, startup_banner  # noqa: E402
 _banner = startup_banner(port=8123)
 assert app_url(8123) in _banner and WIKI_URL in _banner, _banner
 assert "uv run setup" in _banner and "uv run test" in _banner
-print("startup banner OK (app link reflects the port, wiki link, setup/test commands)")
+import re as _re  # noqa: E402
+
+_plain = _re.sub(r"\x1b\[[0-9;]*m", "", _banner)
+_bars = [len(line) for line in _plain.splitlines() if "───" in line]
+assert _bars and max(len(line) for line in _plain.splitlines()) <= max(_bars), \
+    "banner lines must not be wider than the frame bars"
+print("startup banner OK (port link, wiki link, commands, bars cover all text)")
 
 # A busy port is skipped: pick_port returns a later free port in range.
 import socket as _socket  # noqa: E402
