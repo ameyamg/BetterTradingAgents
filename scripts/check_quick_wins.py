@@ -255,4 +255,11 @@ assert APP_URL in _banner and WIKI_URL in _banner, _banner
 assert "uv run setup" in _banner and "uv run test" in _banner
 print("startup banner OK (app link, wiki link, setup/test commands)")
 
+# The crewai per-call token-estimate warning stays silenced (importing
+# app.main pulls in workflow, which sets the level).
+import logging as _logging  # noqa: E402
+
+assert _logging.getLogger("crewai.llms.base_llm").level >= _logging.ERROR
+print("crewai token-estimate noise silenced OK")
+
 print("ALL CHECKS PASSED")

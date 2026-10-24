@@ -54,6 +54,12 @@ from app.tools.market_data import (
 
 logger = logging.getLogger("analysis")
 
+# crewai's LLM base warns on EVERY call when a model id has no native
+# tokenizer (custom/proxied names like ours): it falls back to a harmless
+# characters/4 estimate and announces it each time. Silence just that
+# channel; every other crewai warning still surfaces.
+logging.getLogger("crewai.llms.base_llm").setLevel(logging.ERROR)
+
 Emit = Callable[[str, dict], Awaitable[None]]
 
 # Live reasoning stream (ROADMAP 3.2). The UI pane keeps a sliding window per
