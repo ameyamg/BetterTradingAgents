@@ -84,11 +84,6 @@ uv run app     # start the app on http://127.0.0.1:8000
 
 ## Using the app
 
-> [!TIP]
-> It is cheap to run for real: a full first session (three agent runs, including
-> a ten-agent Max debate, plus manager chat) cost about **¥0.07 of DeepSeek
-> credit, roughly $0.01**.
-
 | Screen | What it does |
 |---|---|
 | **Home** | Analyze up to 5 tickers with outlook and depth, or let **I Am Feeling Lucky** screen candidates. **Incognito** runs market-only and saves nothing. |
@@ -97,6 +92,11 @@ uv run app     # start the app on http://127.0.0.1:8000
 | **Settings** | Every knob editable live; keys go to the OS keychain. The experimentation switch adds opt-in retired pages. |
 
 Screen-by-screen walkthrough with screenshots: wiki [Usage](https://github.com/kingabzpro/BetterTradingAgents/wiki/Usage).
+
+> [!TIP]
+> It is cheap to run for real: a full first session (three agent runs, including
+> a ten-agent Max debate, plus manager chat) cost about **¥0.07 of DeepSeek
+> credit, roughly $0.01**.
 
 ## Configuration
 
