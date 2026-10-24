@@ -64,6 +64,7 @@ def startup_banner(port: int = 8000) -> str:
     else:
         green = bold = dim = label = link = rule = reset = ""
     return (
+        f"\n{rule}  ──────────────────────────────────────────────────────{reset}\n"
         f"{green}{bold}  BetterTradingAgents{reset}"
         f"{dim} - multi-agent stock research and paper trading{reset}\n"
         f"{rule}  ──────────────────────────────────────────────────────{reset}\n\n"
