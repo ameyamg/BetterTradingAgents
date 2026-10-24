@@ -19,6 +19,58 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # accounting, the cost estimate, durable history, and the setup wizard.
 FAST_CHECKS = ("quick_wins", "cost", "run_history", "changes", "ui", "accuracy", "watchlist", "search_export", "paper_trading", "setup_wizard")
 
+# The green butterfly (the project logo) as terminal art; shown by `uv run app`.
+_BUTTERFLY = r"""
+      \  /                \  /
+    .==. \\.            .// .==.
+   //  \\  \\          //  //  \\
+   \\   \\  \\        //  //   //
+    \\   \\. '.      .' ./   //
+     '=._  '. \.  ./ .'  _.='
+         \''. '.||.' .'/''
+          |   \ || /   |
+          |    \||/    |
+          |     ||     |
+          |     ||     |
+         .'     ||     '.
+        /   .--'||'--.   \
+       /   /    ||    \   \
+      '--'     /||\     '--'
+              '.'  '.'
+"""
+
+APP_URL = "http://127.0.0.1:8000"
+WIKI_URL = "https://github.com/kingabzpro/BetterTradingAgents/wiki"
+
+
+def startup_banner() -> str:
+    """Welcome block printed by `uv run app`. With the terminal quiet by
+    default (TERMINAL_LOGGING=0) this is the one thing a user sees at
+    startup, so it carries the link, the docs, and the log hint."""
+    color = (
+        not os.environ.get("NO_COLOR")
+        and (os.environ.get("BTA_WIZARD_COLOR") == "1" or sys.stdout.isatty())
+    )
+    if color:
+        green, bold, dim, label, link, rule = (
+            "\033[32m", "\033[1m", "\033[2m", "\033[35m", "\033[96m\033[4m", "\033[35m"
+        )
+        reset = "\033[0m"
+    else:
+        green = bold = dim = label = link = rule = reset = ""
+    return (
+        f"{green}{_BUTTERFLY.strip(chr(10))}{reset}\n\n"
+        f"{green}{bold}  BetterTradingAgents{reset}"
+        f"{dim} - multi-agent stock research and paper trading{reset}\n"
+        f"{rule}  ──────────────────────────────────────────────────────{reset}\n\n"
+        f"{label}  App   {reset}  {link}{APP_URL}{reset}\n"
+        f"{label}  Docs  {reset}  {link}{WIKI_URL}{reset}\n"
+        f"{label}  Setup {reset}  {dim}uv run setup{reset}"
+        f"{label}     Tests {reset}  {dim}uv run test{reset}\n\n"
+        f"{dim}  Ctrl+C stops the server. Terminal logs stay quiet;"
+        f" set TERMINAL_LOGGING=1 to see them.{reset}\n"
+    )
+
 
 def serve() -> int:
     """Entry point for `uv run app`: start the server on port 8000.
@@ -32,6 +84,7 @@ def serve() -> int:
 
     from app.config import settings
 
+    print(startup_banner())
     # Terminal stays quiet by default (TERMINAL_LOGGING=1 in .env for the
     # INFO trail and per-request access lines).
     uvicorn.run(

@@ -246,4 +246,13 @@ print("outlook horizons OK: 1/5/63 days drive the forecast and its noise band")
 import app.main  # noqa: E402, F401
 
 print("app.main import OK")
+
+# The `uv run app` welcome banner: link + docs + commands must be present.
+from app.cli import APP_URL, WIKI_URL, startup_banner  # noqa: E402
+
+_banner = startup_banner()
+assert APP_URL in _banner and WIKI_URL in _banner, _banner
+assert "uv run setup" in _banner and "uv run test" in _banner
+print("startup banner OK (app link, wiki link, setup/test commands)")
+
 print("ALL CHECKS PASSED")
