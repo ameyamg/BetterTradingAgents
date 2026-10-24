@@ -39,7 +39,7 @@ Paper trading only. Research base: the
 | 💬 | **Chat with the manager** | Follow-up chat grounded in that run's research. |
 | 🕶️ | **Incognito mode** | Market-only run: no account, no saving; download the report and it is gone. |
 | 🧪 | **Walk-forward backtests** | Replay past dates with point-in-time data, graded vs SPY after costs. |
-| ✅ | **Tested end to end** | 33 automated check groups plus a real-browser smoke; every setting round-trips exactly through the API and the web UI. |
+| ✅ | **Tested end to end** | 32 automated check groups plus a real-browser smoke; every setting round-trips exactly through the API and the web UI. |
 | 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
 | 📊 | **Real market data** | Finnhub, Olostep, yfinance; Bako (TimesFM) forecasts at the run's horizon, with a local ridge-model fallback. |
 | 🧠 | **Model flexibility** | Any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama), per role or per agent, with automatic fallback when a provider rejects an output format. |
@@ -94,9 +94,12 @@ uv run app     # start the app on http://127.0.0.1:8000
 Screen-by-screen walkthrough with screenshots: wiki [Usage](https://github.com/kingabzpro/BetterTradingAgents/wiki/Usage).
 
 > [!TIP]
-> It is cheap to run for real: a full first session (three agent runs, including
-> a ten-agent Max debate, plus manager chat) cost about **¥0.07 of DeepSeek
-> credit, roughly $0.01**.
+> It is cheap to run for real. With DeepSeek V4.1 Flash, one ticker costs
+> about **$0.02 at Fast (3 agents), $0.04 at Pro (7 agents), $0.07 at Max
+> (10 agents)** - the measured median of 88 real Max runs; news-heavy
+> sessions run higher, and DeepSeek off-peak is half price. Mock mode is
+> free, and an LLM key is the only paid prerequisite: every data provider
+> has a free tier and yfinance needs no key.
 
 ## Configuration
 
