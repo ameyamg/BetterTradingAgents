@@ -178,10 +178,10 @@ DATA_PROVIDERS = [
         "https://olostep.com",
     ),
     (
-        "NIXTLA_API_KEY",
-        "Nixtla TimeGPT",
-        "hosted 5-day forecast (falls back to the local trend model)",
-        "https://nixtla.io",
+        "BAKO_API_KEY",
+        "Bako",
+        "hosted TimesFM 5-day forecast (falls back to the local trend model)",
+        "https://bako.co",
     ),
 ]
 

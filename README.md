@@ -41,7 +41,7 @@ Paper trading only. Research base: the
 | 🧪 | **Walk-forward backtests** | Replay past dates with point-in-time data, graded vs SPY after costs. |
 | ✅ | **Tested end to end** | 33 automated check groups plus a real-browser smoke; every setting round-trips exactly through the API and the web UI. |
 | 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
-| 📊 | **Real market data** | Finnhub, Olostep, yfinance; TimeGPT or Chronos-2 forecasts, local fallback. |
+| 📊 | **Real market data** | Finnhub, Olostep, yfinance; Bako (TimesFM) forecasts with a local trend fallback. |
 | 🧠 | **Model flexibility** | Any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama), per role or per agent, with automatic fallback when a provider rejects an output format. |
 | 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps, plus a deployment budget, bear-market brake, and session webhook. |
 | 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served by FastAPI. |
@@ -77,9 +77,12 @@ uv run app     # start the app on http://127.0.0.1:8000
 
 > [!TIP]
 > No LLM key yet? Leave `LLM_API_KEY` empty and the full workflow runs in clearly
-> labeled mock mode on live market data. A skippable **Get set up** card on Home
-> walks the first keys with a live test. Everything is editable later on the
-> in-app Settings page, no restart needed.
+> labeled mock mode on live market data. And the reverse also holds: with only
+> an LLM key and no provider keys, every agent still gets real input from
+> yfinance plus deterministic Python math (the sentiment agent reads a
+> price/volume crowd proxy, the forecast falls back to a local trend fit).
+> A skippable **Get set up** card on Home walks the first keys with a live test.
+> Everything is editable later on the in-app Settings page, no restart needed.
 
 ## Using the app
 
@@ -104,8 +107,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `LLM_MODEL` | `gpt-6-luna` | Model for every role without an override |
 | `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
 | `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
-| `NIXTLA_API_KEY` | Not set | 5-day forecast (TimeGPT) |
-| `TSFM_API_KEY` | Not set | 5-day forecast (Chronos-2) when TimeGPT is down |
+| `BAKO_API_KEY` | Not set | 5-day forecast (TimesFM via Bako); without it, a local trend fit on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |

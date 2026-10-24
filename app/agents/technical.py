@@ -62,11 +62,10 @@ def mock(ticker: str, payload: dict) -> dict:
         score += 1
     if (payload.get("macd_histogram") or 0) > 0:
         score += 0.5
-    # Any hosted forecast counts (TimeGPT or TSFM/Chronos-2); the local fit
-    # needs a decent trend R2. A hardcoded "timegpt-1" silently dropped TSFM
-    # forecasts from the score after the provider chain shipped.
+    # Any hosted forecast counts (Bako/TimesFM, or timegpt-1 payloads saved
+    # by older versions); the local fit needs a decent trend R2.
     forecast_method = str(payload.get("forecast_method") or "")
-    forecast_usable = forecast_method.startswith(("timegpt-", "tsfm-")) or (
+    forecast_usable = forecast_method.startswith(("timegpt-", "bako-")) or (
         (payload.get("forecast_trend_r2") or 0) >= 0.25
     )
     if forecast_usable:

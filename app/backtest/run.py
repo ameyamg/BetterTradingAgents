@@ -101,8 +101,8 @@ async def run_backtest(
     """Run the pipeline at every grid date and grade the decisions.
 
     Mock mode (default) forces the rule-based agents even when an LLM key is
-    configured; TimeGPT is disabled either way unless the caller re-enables
-    it, so backtests stay free and deterministic.
+    configured; hosted forecasts are disabled either way unless the caller
+    re-enables them, so backtests stay free and deterministic.
 
     `fundamentals="excluded"` (default) omits fundamentals from snapshots and
     drops the fundamental analyst from the replay.
@@ -142,8 +142,7 @@ async def run_backtest(
         settings.llm_api_key = ""
         workflow._llms.clear()
         workflow._llm_roles_initialized.clear()
-    settings.nixtla_api_key = ""  # no paid forecasts inside a backtest
-    settings.tsfm_api_key = ""
+    settings.bako_api_key = ""  # no hosted forecasts inside a backtest
 
     profile = depth_profile(depth)
     exclusions = tuple(exclude_analysts)

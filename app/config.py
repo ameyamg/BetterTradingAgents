@@ -114,10 +114,10 @@ class Settings:
     # Data providers
     finnhub_api_key: str = _env("FINNHUB_API_KEY")
     olostep_api_key: str = _env("OLOSTEP_API_KEY")
-    nixtla_api_key: str = _env("NIXTLA_API_KEY")
-    # TSFM.ai hosts Chronos-2 / Granite TTM forecasting; the second hosted
-    # forecast in the chain (TimeGPT, then TSFM, then the local trend model).
-    tsfm_api_key: str = _env("TSFM_API_KEY")
+    # Bako serves per-symbol ML price predictions (TimesFM via Vertex AI);
+    # the hosted forecast in the chain (Bako, then the local trend model on
+    # the yfinance closes). Free plan: 100 calls/day.
+    bako_api_key: str = _env("BAKO_API_KEY")
     # SEC EDGAR (ROADMAP P1.15) needs no key, but asks callers to identify
     # themselves. Set your own contact so SEC can reach you, not the project.
     sec_edgar_user_agent: str = _env("SEC_EDGAR_USER_AGENT")

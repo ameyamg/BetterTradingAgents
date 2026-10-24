@@ -47,7 +47,7 @@ def _fallback_notes(providers: dict[str, str], expected: list[str]) -> list[str]
     """Plain-text notes for inputs that degraded below the configured provider."""
     notes: list[str] = []
     if "forecast" in expected:
-        if providers.get("forecast") == "local" and (settings.nixtla_api_key or settings.tsfm_api_key):
+        if providers.get("forecast") == "local" and settings.bako_api_key:
             notes.append("forecast: local model (hosted forecast unavailable)")
         elif providers.get("forecast") == "none":
             notes.append("forecast: not available")
@@ -57,8 +57,12 @@ def _fallback_notes(providers: dict[str, str], expected: list[str]) -> list[str]
             notes.append("fundamentals: not available")
         elif fundamentals == "yfinance" and settings.finnhub_api_key:
             notes.append("fundamentals: yfinance (finnhub returned nothing)")
-    if "sentiment" in expected and providers.get("social") in ("none", ""):
-        notes.append("social posts: none retrieved")
+    if "sentiment" in expected:
+        social = providers.get("social")
+        if social in ("none", ""):
+            notes.append("social posts: none retrieved")
+        elif social == "proxy":
+            notes.append("social: price/volume proxy (no social source configured)")
     return notes
 
 

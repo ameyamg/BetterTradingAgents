@@ -31,11 +31,10 @@ logger = logging.getLogger("market")
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 OLOSTEP_SEARCH = "https://api.olostep.com/v1/searches"
 OLOSTEP_SCRAPE = "https://api.olostep.com/v1/scrapes"
-TIMEGPT_FORECAST = "https://api.nixtla.io/v2/forecast"
-TSFM_FORECAST = "https://api.tsfm.ai/v1/forecast"
-# Chronos-2 is TSFM.ai's flagship forecaster (quantile-native); the model
-# catalog is discoverable at https://api.tsfm.ai/api/models.
-TSFM_MODEL = "amazon/chronos-2"
+# Bako serves daily ML price predictions per symbol (TimesFM on Vertex AI
+# plus a TF.js model, refreshed every day); free plan is 100 calls/day.
+# https://api.bako.co/docs
+BAKO_PREDICTIONS = "https://api.bako.co/v1/predictions"
 
 _price_cache: dict[str, tuple[float, float]] = {}  # ticker -> (price, fetched_at)
 _CACHE_TTL = 60.0
@@ -71,6 +70,10 @@ class MarketData:
     fundamentals: dict = field(default_factory=dict)
     news: list[dict] = field(default_factory=list)
     social: list[dict] = field(default_factory=list)  # Reddit / StockTwits posts
+    # Deterministic price/volume stand-in for the sentiment analyst when no
+    # social source exists (LLM-only installs). Live path only: backtest
+    # snapshots never carry one, so replayed decisions stay byte-identical.
+    crowd_proxy: dict | None = None
     sources: dict = field(default_factory=dict)  # prices / fundamentals / news / social
     hosted_forecast: dict | None = None  # resolved by get_stock_data's forecast hook
     as_of: str = ""
@@ -153,8 +156,15 @@ async def get_stock_data(
         data.news, data.sources["news"] = olostep_news, "olostep"
     else:
         data.news, data.sources["news"] = yf_data["news"], "yfinance"
-    # Social sentiment posts (ROADMAP 3.1): Olostep site-restricted search.
-    data.social, data.sources["social"] = social, ("olostep" if social else "none")
+    # Social sentiment posts (ROADMAP 3.1): Olostep site-restricted search;
+    # with no posts (no key or a thin crowd) a price/volume proxy keeps the
+    # sentiment analyst grounded in real math instead of nothing.
+    if social:
+        data.social, data.sources["social"] = social, "olostep"
+    else:
+        data.social = []
+        data.crowd_proxy = _crowd_proxy(yf_data)
+        data.sources["social"] = "proxy" if data.crowd_proxy else "none"
     data.sources["prices"] = "yfinance"
     data.hosted_forecast = hosted
     data.as_of = datetime.now(timezone.utc).isoformat()
@@ -247,142 +257,73 @@ async def get_news_between(ticker: str, from_date: str, to_date: str) -> list[di
     )
 
 
-async def get_timegpt_forecast(
-    closes: list[float], horizon: int = 5
+async def get_bako_forecast(
+    ticker: str, horizon: int = 5, current_price: float | None = None
 ) -> dict | None:
-    """Ask TimeGPT for a zero-shot forecast; return None for the local fallback."""
-    if not settings.nixtla_api_key or horizon < 1 or len(closes) < 30:
+    """Ask Bako for its per-symbol price predictions; None for the fallback.
+
+    Unlike the series-based links, Bako is keyed on the ticker alone: it
+    serves precomputed daily predictions (up to 100 days), so the closes and
+    the forecast hook's overlap are irrelevant here - only the current price
+    (for the change percent) and the horizon row matter.
+    """
+    if not settings.bako_api_key or horizon < 1 or not ticker or not current_price:
         return None
-    sample = closes[-512:]
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                TIMEGPT_FORECAST,
-                headers={"Authorization": f"Bearer {settings.nixtla_api_key}"},
-                json={
-                    "freq": "D",
-                    "h": horizon,
-                    "series": {"sizes": [len(sample)], "y": sample},
-                    "model": "timegpt-1",
-                    "finetune_steps": 0,
-                },
+            response = await client.get(
+                BAKO_PREDICTIONS,
+                headers={"api-key": settings.bako_api_key},
+                params={"symbol": ticker},
             )
             response.raise_for_status()
-            return _normalize_timegpt_forecast(response.json(), closes[-1], horizon)
+            return _normalize_bako_forecast(response.json(), current_price, horizon)
     except Exception as exc:  # noqa: BLE001 - provider failure must degrade gracefully
-        logger.warning("TimeGPT forecast failed: %s", exc)
-        return None
-
-
-async def get_tsfm_forecast(
-    closes: list[float], horizon: int = 5
-) -> dict | None:
-    """Ask TSFM.ai (Chronos-2) for a zero-shot forecast; None for the fallback."""
-    if not settings.tsfm_api_key or horizon < 1 or len(closes) < 30:
-        return None
-    sample = closes[-512:]
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                TSFM_FORECAST,
-                headers={"Authorization": f"Bearer {settings.tsfm_api_key}"},
-                json={
-                    "model": TSFM_MODEL,
-                    # Canonical TSFM.ai shape: univariate targets are rows of
-                    # [value], so the payload moves between their SDKs unchanged.
-                    "inputs": [{"target": [[value] for value in sample]}],
-                    "parameters": {
-                        "prediction_length": horizon,
-                        "frequency": "D",
-                        "quantile_levels": [0.1, 0.5, 0.9],
-                    },
-                },
-            )
-            response.raise_for_status()
-            return _normalize_tsfm_forecast(response.json(), closes[-1], horizon)
-    except Exception as exc:  # noqa: BLE001 - provider failure must degrade gracefully
-        logger.warning("TSFM forecast failed: %s", exc)
+        logger.warning("Bako forecast failed: %s", exc)
         return None
 
 
 async def get_hosted_forecast(
-    closes: list[float], horizon: int = 5
+    closes: list[float], horizon: int = 5, ticker: str = ""
 ) -> dict | None:
-    """The hosted forecast chain: TimeGPT while its quota allows, then TSFM.ai
-    (Chronos-2). None sends the caller to its local fallback; any provider
-    failure degrades silently to the next link."""
-    hosted = await get_timegpt_forecast(closes, horizon)
-    if hosted is None:
-        hosted = await get_tsfm_forecast(closes, horizon)
-    return hosted
+    """The hosted forecast link: Bako (needs the ticker). None sends the
+    caller to its local yfinance-closes trend fallback; a Bako failure
+    degrades silently."""
+    return await get_bako_forecast(
+        ticker, horizon, closes[-1] if closes else None
+    )
 
 
-def _normalize_timegpt_forecast(
+def _normalize_bako_forecast(
     payload: dict, current_price: float, horizon: int
 ) -> dict | None:
-    means = payload.get("mean")
-    if (
-        not isinstance(means, list)
-        or len(means) < horizon
-        or not isinstance(means[horizon - 1], (int, float))
-    ):
-        return None
-    price = float(means[horizon - 1])
-    if current_price <= 0 or price <= 0 or not isfinite(price):
-        return None
-    return {
-        "forecast_price_5d": round(price, 2),
-        "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
-        "forecast_trend_r2": None,
-        "forecast_window_days": None,
-        "forecast_horizon_days": horizon,
-        "forecast_method": "timegpt-1",
-    }
+    """Map a Bako /v1/predictions response onto the app's forecast fields.
 
-
-def _normalize_tsfm_forecast(
-    payload: dict, current_price: float, horizon: int
-) -> dict | None:
-    """Map a TSFM.ai response onto the app's forecast fields.
-
-    Prefers the median quantile path (level 0.5), falls back to the middle
-    quantile and then the mean; paths are rows of [value] per the canonical
-    response. The +/- band stays volatility-derived (risk.forecast_noise_pct)
-    exactly like every other provider, so the risk-gate math is untouched.
+    Rows are {date, price} calendar days starting at the prediction run date,
+    so row `horizon - 1` mirrors the step index the other providers use. Bako
+    is point-only: the +/- band stays volatility-derived
+    (risk.forecast_noise_pct) exactly like every other provider, so the
+    risk-gate math is untouched.
     """
-    outputs = payload.get("outputs")
-    if not isinstance(outputs, list) or not outputs:
+    rows = payload.get("data")
+    if not isinstance(rows, list) or len(rows) < horizon:
         return None
-    output = outputs[0]
-    if not isinstance(output, dict):
+    point = rows[horizon - 1]
+    if not isinstance(point, dict):
         return None
-    path = None
-    quantiles = output.get("quantile_predictions")
-    if isinstance(quantiles, list) and quantiles:
-        entries = [e for e in quantiles if isinstance(e, dict) and isinstance(e.get("values"), list)]
-        pick = next((e for e in entries if e.get("level") == 0.5), entries[len(entries) // 2] if entries else None)
-        if pick is not None:
-            path = pick["values"]
-    if path is None:
-        path = output.get("mean")
-    if not isinstance(path, list) or len(path) < horizon:
+    price = point.get("price")
+    if not isinstance(price, (int, float)) or not isfinite(float(price)):
         return None
-    point = path[horizon - 1]
-    if isinstance(point, list):
-        point = point[0] if point else None
-    if not isinstance(point, (int, float)) or not isfinite(float(point)):
-        return None
-    price = float(point)
+    price = float(price)
     if current_price <= 0 or price <= 0:
         return None
-    model_id = str(payload.get("model") or TSFM_MODEL)
     return {
         "forecast_price_5d": round(price, 2),
         "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
         "forecast_trend_r2": None,
         "forecast_window_days": None,
         "forecast_horizon_days": horizon,
-        "forecast_method": f"tsfm-{model_id.rsplit('/', 1)[-1]}",
+        "forecast_method": "bako-timesfm",
     }
 
 
@@ -673,12 +614,50 @@ def _olostep_links(payload: dict) -> list[dict]:
     return []
 
 
+def _crowd_proxy(yf: dict) -> dict | None:
+    """Price/volume stand-in for retail mood when no social source exists.
+
+    Pure math over the yfinance data already in hand: short momentum, volume
+    spike, and distance from the 6-month high - the signals a retail crowd
+    chases. Returns None when there is not enough history to say anything.
+    """
+    closes = yf.get("closes") or []
+    volumes = yf.get("volumes") or []
+    highs = yf.get("highs") or []
+    if len(closes) < 6:
+        return None
+
+    def pct(days: int) -> float | None:
+        if len(closes) <= days or not closes[-1 - days]:
+            return None
+        return round((closes[-1] / closes[-1 - days] - 1) * 100, 2)
+
+    avg = (
+        sum(volumes[-21:-1]) / 20
+        if len(volumes) >= 21 and sum(volumes[-21:-1])
+        else None
+    )
+    proxy = {
+        "change_5d_pct": pct(5),
+        "change_21d_pct": pct(21),
+        "relative_volume": (
+            round(volumes[-1] / avg, 2) if avg and volumes[-1] else None
+        ),
+        "below_6m_high_pct": (
+            round((max(highs) - closes[-1]) / closes[-1] * 100, 2) if highs else None
+        ),
+    }
+    proxy = {k: v for k, v in proxy.items() if v is not None}
+    return proxy or None
+
+
 async def _olostep_social(ticker: str) -> list[dict]:
     """Reddit / StockTwits posts about the ticker (ROADMAP 3.1).
 
     A site-restricted web search, not a dated API: posts are current-vintage,
     so backtest snapshots never call this - they replay with an empty set and
-    the sentiment analyst reports a thin-volume neutral.
+    the sentiment analyst falls back to the thin-volume neutral (never the
+    live-path crowd proxy, keeping replayed decisions identical).
     """
     if not settings.olostep_api_key:
         return []

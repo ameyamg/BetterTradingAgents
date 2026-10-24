@@ -31,8 +31,8 @@ def _hosted_provider(payload: dict) -> str:
     method = str(hosted.get("forecast_method") or "")
     if method == "timegpt-1":
         return "Nixtla TimeGPT"
-    if method.startswith("tsfm-"):
-        return f"TSFM.ai {method[len('tsfm-'):]}"
+    if method.startswith("bako-"):
+        return "Bako (TimesFM)"
     return "the configured hosted provider"
 
 
@@ -80,8 +80,8 @@ def mock(ticker: str, payload: dict) -> dict:
     # Annualized vol -> ~1-sigma move over the run's horizon, in percent.
     noise = round(vol / (252**0.5) * (horizon**0.5), 2) if vol else None
 
-    # Hosted forecasts (TimeGPT, TSFM/Chronos-2) are authoritative with no
-    # trend R2 attached; only the local fit needs a decent R2.
+    # Hosted forecasts (Bako/TimesFM) are authoritative with no trend R2
+    # attached; only the local fit needs a decent R2.
     if method in ("log_linear_trend", "none") and (r2 is None or r2 < 0.25):
         signal, confidence = "neutral", 0.4
         detail = f"unusable projection ({method}, trend R2 {r2})"
