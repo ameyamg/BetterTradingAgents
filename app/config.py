@@ -215,6 +215,8 @@ class Settings:
         "true",
         "yes",
     )
+    # Server port for `uv run app`; when busy, the next free port is used.
+    app_port: int = min(max(int(_env("APP_PORT", "8000")), 1), 65535)
     alpaca_max_order_usd: float = float(_env("ALPACA_MAX_ORDER_USD", "10000"))
     alpaca_max_orders_per_day: int = int(_env("ALPACA_MAX_ORDERS_PER_DAY", "20"))
     alpaca_max_decision_age_hours: float = float(
