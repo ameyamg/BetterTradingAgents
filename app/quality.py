@@ -57,8 +57,12 @@ def _fallback_notes(providers: dict[str, str], expected: list[str]) -> list[str]
             notes.append("fundamentals: not available")
         elif fundamentals == "yfinance" and settings.finnhub_api_key:
             notes.append("fundamentals: yfinance (finnhub returned nothing)")
-    if "sentiment" in expected and providers.get("social") in ("none", ""):
-        notes.append("social posts: none retrieved")
+    if "sentiment" in expected:
+        social = providers.get("social")
+        if social in ("none", ""):
+            notes.append("social posts: none retrieved")
+        elif social == "proxy":
+            notes.append("social: price/volume proxy (no social source configured)")
     return notes
 
 

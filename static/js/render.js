@@ -287,7 +287,7 @@ export function setHeader(ticker, price, name, sources) {
   else if (priceElement && name) priceElement.textContent = name;
   if (sourceElement && sources) {
     const forecastSource = sources.forecast === "bako" ? "Bako TimesFM" : sources.forecast === "timegpt" ? "Nixtla TimeGPT" : sources.forecast === "local" ? "local forecast" : null;
-    const socialSource = sources.social === "olostep" ? "reddit/stocktwits" : null;
+    const socialSource = sources.social === "olostep" ? "reddit/stocktwits" : sources.social === "proxy" ? "crowd proxy" : null;
     const unique = [...new Set([sources.prices, sources.fundamentals, sources.news, socialSource, forecastSource].filter((source) => source && source !== "none"))];
     const label = unique.length ? `via ${unique.join(" + ")}` : "";
     sourceElement.textContent = label;

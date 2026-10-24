@@ -93,6 +93,12 @@ no_keys = build("2026-09-08T11:00:00+00:00", "short_term", ALL,
                             "social": "none"}, now=NOW)
 assert no_keys.provider_fallbacks == ["social posts: none retrieved"], no_keys.provider_fallbacks
 
+proxied = build("2026-09-08T11:00:00+00:00", "short_term", ALL,
+                results(), {"forecast": "local", "fundamentals": "yfinance",
+                            "social": "proxy"}, now=NOW)
+assert proxied.provider_fallbacks == [
+    "social: price/volume proxy (no social source configured)"], proxied.provider_fallbacks
+
 settings.bako_api_key = "test-key"
 settings.finnhub_api_key = "test-key"
 configured = build("2026-09-08T11:00:00+00:00", "short_term", ALL,
@@ -104,7 +110,7 @@ assert configured.provider_fallbacks == [
 ]
 settings.bako_api_key = ""
 settings.finnhub_api_key = ""
-print("fallbacks OK: degraded inputs named, unconfigured providers not flagged")
+print("fallbacks OK: degraded inputs named, unconfigured providers not flagged, proxy named")
 
 # ---- manager output: conditions parsed, clipped, and mocked ---------------------
 parsed = manager_agent.to_manager_result(

@@ -1037,7 +1037,11 @@ async def analyze_ticker(
                 token_totals=token_totals,
                 role_usage=role_usage,
                 live=live_context,
-                payload={"items": market.social, "user_context": user_ctx},
+                payload={
+                    "items": market.social,
+                    "crowd_proxy": market.crowd_proxy,
+                    "user_context": user_ctx,
+                },
             )
         return await _run_agent(
             forecast,

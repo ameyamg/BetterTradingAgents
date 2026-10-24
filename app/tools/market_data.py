@@ -70,6 +70,10 @@ class MarketData:
     fundamentals: dict = field(default_factory=dict)
     news: list[dict] = field(default_factory=list)
     social: list[dict] = field(default_factory=list)  # Reddit / StockTwits posts
+    # Deterministic price/volume stand-in for the sentiment analyst when no
+    # social source exists (LLM-only installs). Live path only: backtest
+    # snapshots never carry one, so replayed decisions stay byte-identical.
+    crowd_proxy: dict | None = None
     sources: dict = field(default_factory=dict)  # prices / fundamentals / news / social
     hosted_forecast: dict | None = None  # resolved by get_stock_data's forecast hook
     as_of: str = ""
@@ -152,8 +156,15 @@ async def get_stock_data(
         data.news, data.sources["news"] = olostep_news, "olostep"
     else:
         data.news, data.sources["news"] = yf_data["news"], "yfinance"
-    # Social sentiment posts (ROADMAP 3.1): Olostep site-restricted search.
-    data.social, data.sources["social"] = social, ("olostep" if social else "none")
+    # Social sentiment posts (ROADMAP 3.1): Olostep site-restricted search;
+    # with no posts (no key or a thin crowd) a price/volume proxy keeps the
+    # sentiment analyst grounded in real math instead of nothing.
+    if social:
+        data.social, data.sources["social"] = social, "olostep"
+    else:
+        data.social = []
+        data.crowd_proxy = _crowd_proxy(yf_data)
+        data.sources["social"] = "proxy" if data.crowd_proxy else "none"
     data.sources["prices"] = "yfinance"
     data.hosted_forecast = hosted
     data.as_of = datetime.now(timezone.utc).isoformat()
@@ -603,12 +614,50 @@ def _olostep_links(payload: dict) -> list[dict]:
     return []
 
 
+def _crowd_proxy(yf: dict) -> dict | None:
+    """Price/volume stand-in for retail mood when no social source exists.
+
+    Pure math over the yfinance data already in hand: short momentum, volume
+    spike, and distance from the 6-month high - the signals a retail crowd
+    chases. Returns None when there is not enough history to say anything.
+    """
+    closes = yf.get("closes") or []
+    volumes = yf.get("volumes") or []
+    highs = yf.get("highs") or []
+    if len(closes) < 6:
+        return None
+
+    def pct(days: int) -> float | None:
+        if len(closes) <= days or not closes[-1 - days]:
+            return None
+        return round((closes[-1] / closes[-1 - days] - 1) * 100, 2)
+
+    avg = (
+        sum(volumes[-21:-1]) / 20
+        if len(volumes) >= 21 and sum(volumes[-21:-1])
+        else None
+    )
+    proxy = {
+        "change_5d_pct": pct(5),
+        "change_21d_pct": pct(21),
+        "relative_volume": (
+            round(volumes[-1] / avg, 2) if avg and volumes[-1] else None
+        ),
+        "below_6m_high_pct": (
+            round((max(highs) - closes[-1]) / closes[-1] * 100, 2) if highs else None
+        ),
+    }
+    proxy = {k: v for k, v in proxy.items() if v is not None}
+    return proxy or None
+
+
 async def _olostep_social(ticker: str) -> list[dict]:
     """Reddit / StockTwits posts about the ticker (ROADMAP 3.1).
 
     A site-restricted web search, not a dated API: posts are current-vintage,
     so backtest snapshots never call this - they replay with an empty set and
-    the sentiment analyst reports a thin-volume neutral.
+    the sentiment analyst falls back to the thin-volume neutral (never the
+    live-path crowd proxy, keeping replayed decisions identical).
     """
     if not settings.olostep_api_key:
         return []

@@ -77,9 +77,12 @@ uv run app     # start the app on http://127.0.0.1:8000
 
 > [!TIP]
 > No LLM key yet? Leave `LLM_API_KEY` empty and the full workflow runs in clearly
-> labeled mock mode on live market data. A skippable **Get set up** card on Home
-> walks the first keys with a live test. Everything is editable later on the
-> in-app Settings page, no restart needed.
+> labeled mock mode on live market data. And the reverse also holds: with only
+> an LLM key and no provider keys, every agent still gets real input from
+> yfinance plus deterministic Python math (the sentiment agent reads a
+> price/volume crowd proxy, the forecast falls back to a local trend fit).
+> A skippable **Get set up** card on Home walks the first keys with a live test.
+> Everything is editable later on the in-app Settings page, no restart needed.
 
 ## Using the app
 

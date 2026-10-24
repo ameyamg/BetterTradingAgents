@@ -53,6 +53,37 @@ for items in ([], bullish_posts[:2]):
 assert sentiment.MIN_ITEMS == 3
 print("thin-volume brake OK:", len([]), "and", 2, "posts -> neutral 0.35")
 
+# ---- crowd proxy: deterministic reading when no social source exists ------------
+proxy_up = sentiment.mock("NVDA", {"items": [], "crowd_proxy": {
+    "change_5d_pct": 2.1, "change_21d_pct": 6.4,
+    "relative_volume": 1.8, "below_6m_high_pct": 2.0}})
+assert proxy_up["signal"] == "positive" and proxy_up["confidence"] == 0.5, proxy_up
+assert "proxy" in proxy_up["summary"], proxy_up
+proxy_down = sentiment.mock("NVDA", {"items": [], "crowd_proxy": {
+    "change_5d_pct": -2.1, "change_21d_pct": -6.4,
+    "relative_volume": 1.8, "below_6m_high_pct": 24.0}})
+assert proxy_down["signal"] == "negative" and proxy_down["confidence"] == 0.5, proxy_down
+proxy_flat = sentiment.mock("NVDA", {"items": [], "crowd_proxy": {
+    "change_5d_pct": 0.2, "change_21d_pct": 1.0,
+    "relative_volume": 0.9, "below_6m_high_pct": 9.0}})
+assert proxy_flat["signal"] == "neutral", proxy_flat
+print("crowd proxy mock OK:", proxy_up["signal"], "/", proxy_down["signal"], "/",
+      proxy_flat["signal"])
+
+# ---- _crowd_proxy math ----------------------------------------------------------
+from app.tools.market_data import _crowd_proxy  # noqa: E402
+
+px = _crowd_proxy({
+    "closes": [100.0] * 25 + [110.0],          # +10% vs both the 5d and 21d marks
+    "volumes": [1_000_000.0] * 25 + [2_500_000.0],  # 2.5x the 20-day average
+    "highs": [101.0] * 25 + [121.0],           # 6m high 121 -> 10% above price 110
+})
+assert px == {"change_5d_pct": 10.0, "change_21d_pct": 10.0,
+              "relative_volume": 2.5, "below_6m_high_pct": 10.0}, px
+assert _crowd_proxy({"closes": [100.0, 101.0]}) is None  # not enough history
+assert _crowd_proxy({}) is None
+print("crowd proxy math OK: momentum, volume spike, 6m-high distance, guards")
+
 # ---- to_result coercion --------------------------------------------------------
 result = sentiment.to_result(
     {"signal": "VERY-BULLISH", "confidence": 83, "summary": "x" * 900}, "NVDA"
@@ -149,6 +180,22 @@ async def e2e():
     assert "too thin" in quiet.sentiment.summary
     print("e2e (thin crowd) OK:", quiet.decision, "| sentiment neutral",
           f"{quiet.sentiment.confidence:.2f}")
+
+    # LLM-only install: no posts but a live-path crowd proxy -> the agent
+    # reads the deterministic price/volume stand-in instead of going quiet.
+    proxied_snapshot = snapshot("AMD", [])
+    proxied_snapshot.crowd_proxy = {"change_5d_pct": 3.2, "change_21d_pct": 8.0,
+                                    "relative_volume": 1.9, "below_6m_high_pct": 1.5}
+    proxied_snapshot.sources["social"] = "proxy"
+    proxied = await asyncio.wait_for(
+        analyze_ticker("AMD", emit, market_data=proxied_snapshot,
+                       live_context=False, depth="max"),
+        timeout=90,
+    )
+    assert proxied.error is None, proxied.error
+    assert proxied.sentiment is not None and proxied.sentiment.signal == "positive", proxied.sentiment
+    assert proxied.providers["social"] == "proxy"
+    print("e2e (crowd proxy) OK:", proxied.decision, "| sentiment positive via proxy")
 
 
 asyncio.run(e2e())
