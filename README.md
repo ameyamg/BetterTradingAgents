@@ -79,8 +79,8 @@ uv run app     # start the app on http://127.0.0.1:8000
 > No LLM key yet? Leave `LLM_API_KEY` empty and everything runs in clearly
 > labeled mock mode on live market data. The reverse works too: with only an
 > LLM key, every agent still gets real input (yfinance plus deterministic
-> Python math). A skippable **Get set up** card on Home walks the first keys;
-> everything is editable later on the Settings page, no restart needed.
+> Python math). The `uv run setup` wizard walks the first keys; everything
+> is editable later on the Settings page, no restart needed.
 
 ## Using the app
 
@@ -113,7 +113,6 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `BAKO_API_KEY` | Not set | Forecast for the run's outlook horizon (TimesFM via Bako); without it, a local ridge model on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
-| `ONBOARDING_ENABLED` | `0` | Show the guided first-run setup card on the home page |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |
 | `WEBHOOK_URL` | Not set | One plain-text POST per finished autopilot session |
 
@@ -137,7 +136,6 @@ wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Conf
 | `GET` | `/api/runs/{run_id}/events` | Live progress over SSE |
 | `POST` | `/api/runs/{run_id}/chat` | Follow-up chat with the manager |
 | `GET/POST` | `/api/settings` | Read and save settings (secrets masked) |
-| `GET` | `/api/onboarding` | First-run setup state; `POST` variants validate keys live |
 | `GET` | `/api/broker/account` | Paper account state |
 | `POST` | `/api/broker/orders` | Place one paper order (explicit `confirm`) |
 | `GET` | `/api/broker/sync` | Reconciliation and drift state |

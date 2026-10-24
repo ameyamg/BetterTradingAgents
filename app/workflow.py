@@ -183,28 +183,6 @@ def get_chat_llm() -> Any:
     return _llms.get("chat")
 
 
-async def llm_ping() -> tuple[bool, str]:
-    """One-token live check of the configured LLM endpoint (P2.7 onboarding).
-    Builds a throwaway plain-text client so the cached role LLMs are never
-    touched, and caps the reply at a few tokens: the words are irrelevant,
-    only reachability is."""
-    if not settings.llm_configured:
-        return False, "no LLM API key saved yet"
-    try:
-        client = _build_llm("manager", json_mode=False, stream=False)
-    except Exception as exc:  # noqa: BLE001 - bad base_url etc.
-        return False, f"could not build the LLM client: {exc}"
-    client.max_tokens = 8
-    try:
-        reply = await asyncio.to_thread(
-            client.call,
-            [{"role": "user", "content": "Reply with the single word: ready"}],
-        )
-    except Exception as exc:  # noqa: BLE001 - any provider failure is the answer
-        return False, str(exc)[:300]
-    return True, str(reply)[:200]
-
-
 def _drop_json_mode(key: str) -> Any:
     """Rebuild a key's LLM without response_format after the provider
     rejected it (feature-detect on first use, not with a probe call)."""
