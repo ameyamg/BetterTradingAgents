@@ -860,6 +860,15 @@ def _open_local_rows() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def _has_order_history() -> bool:
+    """True once this install has ever recorded an order. An install with an
+    empty broker_orders table has never traded here, so an open order at the
+    shared broker belongs to some other surface (another install, a manual
+    trade), not to a crashed write of ours."""
+    with _connect() as connection:
+        return connection.execute("SELECT 1 FROM broker_orders LIMIT 1").fetchone() is not None
+
+
 def _read_sync_state() -> dict:
     with _connect() as connection:
         row = connection.execute("SELECT * FROM broker_sync WHERE id = 1").fetchone()
@@ -965,6 +974,18 @@ async def sync_once() -> dict:
                 "submitted_at": str(getattr(order, "submitted_at", "") or ""),
             }
         )
+    if drift and not await asyncio.to_thread(_has_order_history):
+        # This install has never recorded an order, so the open order(s) at
+        # the broker were placed by another surface sharing the account (a
+        # second install, a manual trade). Nothing of ours can be out of
+        # sync: report quietly instead of raising the drift banner at users
+        # who never opted into trading here.
+        logger.info(
+            "[broker] %d open order(s) at the broker were not placed by this "
+            "install (no local order history); not flagged as drift",
+            len(drift),
+        )
+        drift = []
     state = {
         "checked_at": time.time(),
         "in_sync": not drift,
