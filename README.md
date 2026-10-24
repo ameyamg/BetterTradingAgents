@@ -39,6 +39,7 @@ Paper trading only. Research base: the
 | 💬 | **Chat with the manager** | Follow-up chat grounded in that run's research. |
 | 🕶️ | **Incognito mode** | Market-only run: no account, no saving; download the report and it is gone. |
 | 🧪 | **Walk-forward backtests** | Replay past dates with point-in-time data, graded vs SPY after costs. |
+| ✅ | **Tested end to end** | 33 automated check groups plus a real-browser smoke; every setting round-trips exactly through the API and the web UI. |
 | 🕘 | **Durable history** | Every run saved in SQLite, reopenable from the Runs page. |
 | 📊 | **Real market data** | Finnhub, Olostep, yfinance; TimeGPT or Chronos-2 forecasts, local fallback. |
 | 🧠 | **Model flexibility** | Any OpenAI-compatible endpoint (OpenAI, DeepSeek, OpenRouter, Z.AI, vLLM, Ollama), per role or per agent, with automatic fallback when a provider rejects an output format. |
