@@ -20,17 +20,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # accounting, the cost estimate, durable history, and the setup wizard.
 FAST_CHECKS = ("quick_wins", "cost", "run_history", "changes", "ui", "accuracy", "watchlist", "search_export", "paper_trading", "setup_wizard")
 
-# The green butterfly (the project logo) as small terminal art; shown by
-# `uv run app`. Compact on purpose: the banner must fit one glance.
-_BUTTERFLY = r"""
-  \  /
- .-\/-.
-(  ||  )
- \ || /
- /_||_\
-  `'`'
-"""
-
 APP_URL = "http://127.0.0.1:8000"
 WIKI_URL = "https://github.com/kingabzpro/BetterTradingAgents/wiki"
 
@@ -75,7 +64,6 @@ def startup_banner(port: int = 8000) -> str:
     else:
         green = bold = dim = label = link = rule = reset = ""
     return (
-        f"{green}{_BUTTERFLY.strip(chr(10))}{reset}\n\n"
         f"{green}{bold}  BetterTradingAgents{reset}"
         f"{dim} - multi-agent stock research and paper trading{reset}\n"
         f"{rule}  ──────────────────────────────────────────────────────{reset}\n\n"
