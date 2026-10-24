@@ -83,6 +83,11 @@ uv run app     # start the app on http://127.0.0.1:8000
 > price/volume crowd proxy, the forecast falls back to a local trend fit).
 > A skippable **Get set up** card on Home walks the first keys with a live test.
 > Everything is editable later on the in-app Settings page, no restart needed.
+>
+> And running it for real is remarkably cheap: a full first session (three
+> complete agent runs, including a ten-agent Max run with the debate and judge,
+> plus manager chat) used about **¥0.07 of DeepSeek credit, roughly $0.01**.
+> One cent buys the whole multi-agent research pipeline.
 
 ## Using the app
 
