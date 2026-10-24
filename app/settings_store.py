@@ -14,6 +14,7 @@ every override and restores the .env values captured at import.
 """
 
 import logging
+import os
 import time
 from typing import Any
 
@@ -22,7 +23,10 @@ from app.db import connect as _connect
 
 logger = logging.getLogger("settings")
 
-KEYRING_SERVICE = "BetterTradingAgents"
+# The OS keychain is machine-global, so fresh-clone tests point this at a
+# scratch service instead of contaminating the real install's entries
+# (checks blank env vars, but nothing else neutralizes the keychain).
+KEYRING_SERVICE = os.environ.get("BTA_KEYRING_SERVICE") or "BetterTradingAgents"
 STR_LIMIT = 2048
 
 
