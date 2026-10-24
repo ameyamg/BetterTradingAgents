@@ -24,7 +24,7 @@ import urllib.request
 from typing import Any, Callable
 
 from app import broker, settings_store
-from app.config import settings
+from app.config import LLM_DEFAULT_BASE_URL, LLM_DEFAULT_MODEL, settings
 
 try:  # optional at import time; the plain UI covers a missing install
     import questionary
@@ -187,12 +187,16 @@ class PlainUI:
         return raw or default
 
     def secret(self, message: str) -> str:
-        import getpass
+        # getpass on Windows waits on the console even when stdin is a pipe
+        # (hangs forever in piped/CI runs), so hide input only on a real tty.
+        if sys.stdin.isatty():
+            import getpass
 
-        try:
-            return getpass.getpass(f"{message} (input hidden): ").strip()
-        except (EOFError, OSError):
-            return ""
+            try:
+                return getpass.getpass(f"{message} (input hidden): ").strip()
+            except (EOFError, OSError):
+                return ""
+        return input(f"{message}: ").strip()
 
 
 def make_ui() -> Any:
@@ -262,6 +266,20 @@ def key_from(name: str) -> str:
     return settings_store.keychain_get(name) or str(getattr(settings, name) or "")
 
 
+# Defaults come straight from config so "already configured" is claimed
+# only for explicitly set values. Without this, a keychain key plus
+# untouched defaults would present as "OpenAI is already configured",
+# which is a lie the live test then exposes.
+def llm_explicitly_set() -> bool:
+    """True only when base URL or model differs from the app defaults."""
+    base_url = str(settings.llm_base_url or "").strip()
+    model = str(settings.llm_model or "").strip()
+    return base_url not in ("", LLM_DEFAULT_BASE_URL) or model not in (
+        "",
+        LLM_DEFAULT_MODEL,
+    )
+
+
 def safe_base_url(url: str) -> bool:
     """Mirror the app's P2.11 guard: a plain-http remote URL leaks the key."""
     if not url.startswith("http://"):
@@ -309,7 +327,7 @@ def step_llm(ui: Any, tests: dict[str, Callable[..., tuple[bool, str]]], state: 
     model = str(settings.llm_model or "").strip()
     existing_key = key_from("llm_api_key")
 
-    if existing_key and base_url:
+    if existing_key and base_url and llm_explicitly_set():
         label = provider_label(base_url)
         print(
             f"\n  {label} is already configured with model `{paint(model or 'default', MAGENTA)}`"

@@ -52,13 +52,19 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
+# Pure LLM defaults, importable before the .env layer resolves (the setup
+# wizard uses them to tell "explicitly configured" from untouched defaults).
+LLM_DEFAULT_BASE_URL = "https://api.openai.com/v1"
+LLM_DEFAULT_MODEL = "gpt-6-luna"
+
+
 class Settings:
     """Simple env-driven settings. No hierarchy, no layers."""
 
     # LLM (any OpenAI-compatible endpoint: OpenAI, OpenRouter, DeepSeek, Qwen, GLM, vLLM...)
-    llm_base_url: str = _env("LLM_BASE_URL", "https://api.openai.com/v1")
+    llm_base_url: str = _env("LLM_BASE_URL", LLM_DEFAULT_BASE_URL)
     llm_api_key: str = _env("LLM_API_KEY")
-    llm_model: str = _env("LLM_MODEL", "gpt-6-luna")
+    llm_model: str = _env("LLM_MODEL", LLM_DEFAULT_MODEL)
     llm_temperature: float = float(_env("LLM_TEMPERATURE", "0.2"))
     llm_timeout_seconds: float = float(_env("LLM_TIMEOUT_SECONDS", "90"))
     # P2.18 runaway bounds: max tokens forwarded to every provider (0 = let
