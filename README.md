@@ -71,7 +71,7 @@ You need [Python 3.12+](https://www.python.org/) and [uv](https://docs.astral.sh
 git clone https://github.com/kingabzpro/BetterTradingAgents.git
 cd BetterTradingAgents
 uv sync        # install dependencies
-uv run setup   # interactive wizard: pick a provider, paste keys, done
+uv run setup   # arrow-key wizard: pick providers, every key tested live before it saves
 uv run app     # start the app on http://127.0.0.1:8000
 ```
 
@@ -113,6 +113,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `BAKO_API_KEY` | Not set | Forecast for the run's outlook horizon (TimesFM via Bako); without it, a local ridge model on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
+| `TERMINAL_LOGGING` | `0` | `1` shows the full INFO log trail and uvicorn request lines in the terminal |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |
 | `WEBHOOK_URL` | Not set | One plain-text POST per finished autopilot session |
 

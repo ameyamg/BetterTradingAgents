@@ -199,6 +199,13 @@ class Settings:
         "true",
         "yes",
     )
+    # Terminal log trail: 0 = warnings and errors only (quiet terminal),
+    # 1 = the full INFO trail plus uvicorn request lines.
+    terminal_logging: bool = _env("TERMINAL_LOGGING", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     alpaca_max_order_usd: float = float(_env("ALPACA_MAX_ORDER_USD", "10000"))
     alpaca_max_orders_per_day: int = int(_env("ALPACA_MAX_ORDERS_PER_DAY", "20"))
     alpaca_max_decision_age_hours: float = float(

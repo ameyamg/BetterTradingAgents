@@ -46,7 +46,12 @@ from app.outlook import DEFAULT_OUTLOOK, Outlook
 from app.runs import store
 from app.tools.market_data import get_closes_between
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+# Quiet terminal by default (TERMINAL_LOGGING=1 in .env for the full trail):
+# warnings and errors always surface, INFO chatter does not.
+logging.basicConfig(
+    level=logging.INFO if settings.terminal_logging else logging.WARNING,
+    format="%(message)s",
+)
 logger = logging.getLogger("analysis")
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
