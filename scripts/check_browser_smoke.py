@@ -714,6 +714,51 @@ def check_paper_portfolio(page) -> None:
         smoke_settings.alpaca_api_key_id, smoke_settings.alpaca_api_secret_key, smoke_settings.alpaca_trading_enabled = original_keys
 
 
+def check_settings_page(page) -> None:
+    """Every setting renders in the web UI, and a real save applies exactly
+    what was typed (owner ask 2026-10-23: check all the settings; the change
+    must be exact or something is missing)."""
+    page.goto(f"{BASE_URL}/settings", wait_until="networkidle")
+    spec = page.request.get(f"{BASE_URL}/api/settings").json()
+    values = {f["name"]: f.get("value") for g in spec["groups"] for f in g["fields"]}
+    # The Experimentation tab renders only after its master switch is on.
+    experimental_on = bool(values.get("experimental_features"))
+    hidden_while_off = set() if experimental_on else {
+        "feature_accuracy", "feature_compare", "feature_watchlist",
+    }
+    expected = {f["name"] for g in spec["groups"] for f in g["fields"]} - hidden_while_off
+    rendered = page.eval_on_selector_all(
+        "[data-name]", "els => els.map(e => e.dataset.name)"
+    )
+    assert len(rendered) == len(set(rendered)), "a field rendered twice"
+    missing = expected - set(rendered)
+    extra = set(rendered) - expected
+    assert not missing and not extra, f"settings UI drift: missing={missing} extra={extra}"
+    print(f"settings page OK: all {len(expected)} expected fields render, none extra")
+
+    # Exact save through the real UI: an int and a bool on the Analysis tab.
+    page.click("#tab-analysis")
+    page.fill('[data-name="max_tickers"]', "4")
+    if page.is_checked('[data-name="stream_reasoning"]'):
+        page.uncheck('[data-name="stream_reasoning"]')
+    else:
+        page.check('[data-name="stream_reasoning"]')
+    wanted_stream = page.is_checked('[data-name="stream_reasoning"]')
+    page.click("#save-btn")
+    page.wait_for_timeout(700)  # save + re-render from the response
+    after = page.request.get(f"{BASE_URL}/api/settings").json()
+    values_after = {f["name"]: f.get("value") for g in after["groups"] for f in g["fields"]}
+    assert values_after["max_tickers"] == 4 and isinstance(values_after["max_tickers"], int), \
+        values_after["max_tickers"]
+    assert values_after["stream_reasoning"] is wanted_stream, values_after["stream_reasoning"]
+    print("settings UI save OK: int and bool applied exactly as typed")
+    page.request.post(
+        f"{BASE_URL}/api/settings",
+        data='{"values": {"max_tickers": 5, "stream_reasoning": false}, "clear_secrets": []}',
+        headers={"Content-Type": "application/json"},
+    )
+
+
 def check_experimental_features(page) -> None:
     """Retired UIs stay dark until the Settings toggles turn them on. The
     master toggle lives in the always-visible Analysis panel; the
@@ -789,6 +834,7 @@ def main() -> None:
                 check_history_page(page)
                 check_p1_6_filters_and_exports(page)
                 check_paper_portfolio(page)
+                check_settings_page(page)
                 check_experimental_features(page)
             finally:
                 browser.close()
