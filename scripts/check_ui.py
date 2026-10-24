@@ -15,7 +15,6 @@ os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "ui_test.db")
 os.environ["LLM_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
-os.environ["NIXTLA_API_KEY"] = ""
 os.environ["BAKO_API_KEY"] = ""
 os.environ["AUTOMATION_ENABLED"] = "0"
 

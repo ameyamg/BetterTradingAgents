@@ -31,7 +31,6 @@ logger = logging.getLogger("market")
 FINNHUB_BASE = "https://finnhub.io/api/v1"
 OLOSTEP_SEARCH = "https://api.olostep.com/v1/searches"
 OLOSTEP_SCRAPE = "https://api.olostep.com/v1/scrapes"
-TIMEGPT_FORECAST = "https://api.nixtla.io/v2/forecast"
 # Bako serves daily ML price predictions per symbol (TimesFM on Vertex AI
 # plus a TF.js model, refreshed every day); free plan is 100 calls/day.
 # https://api.bako.co/docs
@@ -247,33 +246,6 @@ async def get_news_between(ticker: str, from_date: str, to_date: str) -> list[di
     )
 
 
-async def get_timegpt_forecast(
-    closes: list[float], horizon: int = 5
-) -> dict | None:
-    """Ask TimeGPT for a zero-shot forecast; return None for the local fallback."""
-    if not settings.nixtla_api_key or horizon < 1 or len(closes) < 30:
-        return None
-    sample = closes[-512:]
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                TIMEGPT_FORECAST,
-                headers={"Authorization": f"Bearer {settings.nixtla_api_key}"},
-                json={
-                    "freq": "D",
-                    "h": horizon,
-                    "series": {"sizes": [len(sample)], "y": sample},
-                    "model": "timegpt-1",
-                    "finetune_steps": 0,
-                },
-            )
-            response.raise_for_status()
-            return _normalize_timegpt_forecast(response.json(), closes[-1], horizon)
-    except Exception as exc:  # noqa: BLE001 - provider failure must degrade gracefully
-        logger.warning("TimeGPT forecast failed: %s", exc)
-        return None
-
-
 async def get_bako_forecast(
     ticker: str, horizon: int = 5, current_price: float | None = None
 ) -> dict | None:
@@ -303,38 +275,12 @@ async def get_bako_forecast(
 async def get_hosted_forecast(
     closes: list[float], horizon: int = 5, ticker: str = ""
 ) -> dict | None:
-    """The hosted forecast chain: TimeGPT while its quota allows, then Bako
-    (needs the ticker). None sends the caller to its local fallback; any
-    provider failure degrades silently to the next link."""
-    hosted = await get_timegpt_forecast(closes, horizon)
-    if hosted is None:
-        hosted = await get_bako_forecast(
-            ticker, horizon, closes[-1] if closes else None
-        )
-    return hosted
-
-
-def _normalize_timegpt_forecast(
-    payload: dict, current_price: float, horizon: int
-) -> dict | None:
-    means = payload.get("mean")
-    if (
-        not isinstance(means, list)
-        or len(means) < horizon
-        or not isinstance(means[horizon - 1], (int, float))
-    ):
-        return None
-    price = float(means[horizon - 1])
-    if current_price <= 0 or price <= 0 or not isfinite(price):
-        return None
-    return {
-        "forecast_price_5d": round(price, 2),
-        "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
-        "forecast_trend_r2": None,
-        "forecast_window_days": None,
-        "forecast_horizon_days": horizon,
-        "forecast_method": "timegpt-1",
-    }
+    """The hosted forecast link: Bako (needs the ticker). None sends the
+    caller to its local yfinance-closes trend fallback; a Bako failure
+    degrades silently."""
+    return await get_bako_forecast(
+        ticker, horizon, closes[-1] if closes else None
+    )
 
 
 def _normalize_bako_forecast(

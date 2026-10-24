@@ -16,7 +16,6 @@ from pathlib import Path
 # Isolated DB + no provider keys, before app modules import.
 os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "regime_cache_test.db")
 os.environ["LLM_API_KEY"] = ""
-os.environ["NIXTLA_API_KEY"] = ""
 os.environ["BAKO_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""

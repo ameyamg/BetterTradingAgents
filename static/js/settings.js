@@ -293,7 +293,7 @@ function updateNavDots() {
   setDot("llm_roles", roleCount ? "ok" : "off",
     roleCount ? `${roleCount} per-role override${roleCount === 1 ? "" : "s"} set` : "Every role uses the global LLM");
 
-  const missing = [["finnhub_api_key", "Finnhub"], ["olostep_api_key", "Olostep"], ["nixtla_api_key", "TimeGPT"]]
+  const missing = [["finnhub_api_key", "Finnhub"], ["olostep_api_key", "Olostep"], ["bako_api_key", "Bako"]]
     .filter(([name]) => !fields[name].configured)
     .map(([, label]) => label);
   if (missing.length === 0) setDot("providers", "ok", "All three providers connected");

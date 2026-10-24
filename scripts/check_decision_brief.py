@@ -18,7 +18,6 @@ os.environ["DB_PATH"] = str(Path(tempfile.mkdtemp()) / "brief_test.db")
 os.environ["LLM_API_KEY"] = ""
 os.environ["OLOSTEP_API_KEY"] = ""
 os.environ["FINNHUB_API_KEY"] = ""
-os.environ["NIXTLA_API_KEY"] = ""
 os.environ["BAKO_API_KEY"] = ""
 
 from app.agents import manager as manager_agent  # noqa: E402
@@ -94,7 +93,7 @@ no_keys = build("2026-09-08T11:00:00+00:00", "short_term", ALL,
                             "social": "none"}, now=NOW)
 assert no_keys.provider_fallbacks == ["social posts: none retrieved"], no_keys.provider_fallbacks
 
-settings.nixtla_api_key = "test-key"
+settings.bako_api_key = "test-key"
 settings.finnhub_api_key = "test-key"
 configured = build("2026-09-08T11:00:00+00:00", "short_term", ALL,
                    results(), {"forecast": "local", "fundamentals": "yfinance",
@@ -103,7 +102,7 @@ assert configured.provider_fallbacks == [
     "forecast: local model (hosted forecast unavailable)",
     "fundamentals: yfinance (finnhub returned nothing)",
 ]
-settings.nixtla_api_key = ""
+settings.bako_api_key = ""
 settings.finnhub_api_key = ""
 print("fallbacks OK: degraded inputs named, unconfigured providers not flagged")
 

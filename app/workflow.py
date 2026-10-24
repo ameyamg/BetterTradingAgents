@@ -871,9 +871,7 @@ async def analyze_ticker(
             )
         if hosted_forecast:
             indicators.update(hosted_forecast)
-            market.sources["forecast"] = (
-                "timegpt" if hosted_forecast["forecast_method"] == "timegpt-1" else "bako"
-            )
+            market.sources["forecast"] = "bako"
         else:
             market.sources["forecast"] = "local"
     else:

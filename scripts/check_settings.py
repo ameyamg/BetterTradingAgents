@@ -19,7 +19,6 @@ for _var in (
     "LLM_API_KEY",
     "FINNHUB_API_KEY",
     "OLOSTEP_API_KEY",
-    "NIXTLA_API_KEY",
     "ALPACA_API_KEY_ID",
     "ALPACA_API_KEY",
     "ALPACA_SECRET_KEY",

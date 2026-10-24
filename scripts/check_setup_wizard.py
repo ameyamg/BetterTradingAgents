@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "",                # model: accept preset
         "test-key-123",    # API key (plain input: stdin is piped)
         "n",               # do not test the key (no network in checks)
-        "n", "n", "n",     # skip Finnhub / Olostep / Nixtla
+        "n", "n", "n",     # skip Finnhub / Olostep / Bako
         "y",               # write the file
         "n",               # do not run uv sync
     ])

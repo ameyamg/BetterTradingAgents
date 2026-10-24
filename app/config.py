@@ -114,10 +114,9 @@ class Settings:
     # Data providers
     finnhub_api_key: str = _env("FINNHUB_API_KEY")
     olostep_api_key: str = _env("OLOSTEP_API_KEY")
-    nixtla_api_key: str = _env("NIXTLA_API_KEY")
     # Bako serves per-symbol ML price predictions (TimesFM via Vertex AI);
-    # the second hosted forecast in the chain (TimeGPT, then Bako, then the
-    # local trend model). Free plan: 100 calls/day.
+    # the hosted forecast in the chain (Bako, then the local trend model on
+    # the yfinance closes). Free plan: 100 calls/day.
     bako_api_key: str = _env("BAKO_API_KEY")
     # SEC EDGAR (ROADMAP P1.15) needs no key, but asks callers to identify
     # themselves. Set your own contact so SEC can reach you, not the project.

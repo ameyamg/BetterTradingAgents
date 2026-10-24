@@ -10,7 +10,7 @@ _TMP = Path(tempfile.mkdtemp()) / "portfolio_test.db"
 os.environ["DB_PATH"] = str(_TMP)
 
 from app.tools.indicators import compute_indicators, historical_forecast, macd  # noqa: E402
-from app.tools.market_data import _normalize_bako_forecast, _normalize_timegpt_forecast  # noqa: E402
+from app.tools.market_data import _normalize_bako_forecast  # noqa: E402
 from app.outlook import horizon_days as outlook_horizon  # noqa: E402
 from app import discovery  # noqa: E402
 from app.discovery import rank_candidates  # noqa: E402
@@ -41,9 +41,6 @@ forecast = historical_forecast(up)
 assert forecast and forecast["forecast_price_5d"] > up[-1]
 assert forecast["forecast_change_5d_pct"] > 0 and forecast["forecast_trend_r2"] > 0.99
 assert historical_forecast([1, 2, 3]) is None
-timegpt = _normalize_timegpt_forecast({"mean": [101, 102, 103, 104, 105]}, 100, 5)
-assert timegpt and timegpt["forecast_price_5d"] == 105
-assert timegpt["forecast_change_5d_pct"] == 5 and timegpt["forecast_method"] == "timegpt-1"
 
 # Bako: rows are {date, price} calendar days from the prediction run date;
 # row horizon-1 wins. Bad payloads fall through to the next provider.
@@ -176,7 +173,7 @@ print("market analyst mocks OK:", _regime["signal"], _regime["confidence"])
 _fc_payload = {
     "price": 100.0,
     "history_days": 60,
-    "hosted_forecast": {"forecast_change_5d_pct": -4.0, "forecast_method": "timegpt-1"},
+    "hosted_forecast": {"forecast_change_5d_pct": -4.0, "forecast_method": "bako-timesfm"},
     "local_trend_forecast": {"forecast_change_5d_pct": 1.0, "forecast_trend_r2": 0.9,
                              "forecast_method": "log_linear_trend"},
     "trend_context": {"volatility_annualized_pct": 20.0},
@@ -185,7 +182,7 @@ _fc = forecast_agent.mock("NVDA", _fc_payload)
 assert _fc["signal"] == "bearish" and _fc["confidence"] >= 0.5, _fc  # -4% clears ~2.8% noise
 _fc_noisy = forecast_agent.mock("NVDA", {**_fc_payload,
                                          "hosted_forecast": {"forecast_change_5d_pct": -1.0,
-                                                              "forecast_method": "timegpt-1"}})
+                                                              "forecast_method": "bako-timesfm"}})
 assert _fc_noisy["signal"] == "neutral", _fc_noisy  # -1% is inside the noise band
 _fc_weak = forecast_agent.mock("NVDA", {"hosted_forecast": None,
                                         "local_trend_forecast": {"forecast_change_5d_pct": 3.0,
@@ -196,8 +193,8 @@ assert _fc_weak["signal"] == "neutral" and "unusable" in _fc_weak["summary"], _f
 print("forecast mock OK:", _fc["signal"], _fc["confidence"])
 
 # The analyst names the actual provider in its prompt, never a hardcoded one.
-assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "timegpt-1"}}) == "Nixtla TimeGPT"
 assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "bako-timesfm"}}) == "Bako (TimesFM)"
+assert forecast_agent._hosted_provider({"hosted_forecast": {"forecast_method": "timegpt-1"}}) == "Nixtla TimeGPT"
 assert forecast_agent._hosted_provider({}) == "the configured hosted provider"
 print("forecast provider label OK")
 
