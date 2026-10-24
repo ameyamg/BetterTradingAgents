@@ -120,6 +120,7 @@ wiki [Configuration](https://github.com/kingabzpro/BetterTradingAgents/wiki/Conf
 - Keys live in the OS keychain ([keyring](https://pypi.org/project/keyring/)), never in the database or logs.
 - Binds to `127.0.0.1` only; rejects non-loopback `Host` and cross-site `Origin` headers.
 - Paper only: the Alpaca client hardcodes `paper=True`; no live-trading path exists.
+- Found a vulnerability? Report it privately via [GitHub security advisories](https://github.com/kingabzpro/BetterTradingAgents/security/advisories/new) (see [SECURITY.md](SECURITY.md)); no public issues for exploitable findings.
 
 ## API
 
