@@ -138,6 +138,19 @@ async def checks() -> None:
     settings.alpaca_api_key_id = FAKE_KEY
     settings.alpaca_api_secret_key = FAKE_SECRET
 
+    # ---- never-traded install: a foreign open order is not OUR drift --------
+    # Zero local order rows (this install never traded), one open order at
+    # the broker placed by another surface sharing the account: the sweep
+    # must stay quiet - no drift banner for users who never opted in here.
+    foreign = _remote_order("bta-from-another-install", status="new")
+    foreign.symbol = "ALAB"
+    fresh_fake = _FakeClient(account=_raw_account())
+    fresh_fake.open_orders = [foreign]
+    _use(fresh_fake)
+    state = await broker.sync_once()
+    assert state["in_sync"] is True and state["drift"] == [], state
+    print("never-traded OK (foreign open order on an empty history is not drift)")
+
     # ---- startup recovery: a crashed pending_submit row settles ------------
     filled_id = await _insert("syncrun01", "NVDA", "buy")
     unknown_id = await _insert("syncrun01", "TSLA", "buy")
