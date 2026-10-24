@@ -71,7 +71,7 @@ You need [Python 3.12+](https://www.python.org/) and [uv](https://docs.astral.sh
 git clone https://github.com/kingabzpro/BetterTradingAgents.git
 cd BetterTradingAgents
 uv sync        # install dependencies
-uv run setup   # arrow-key wizard: pick providers, every key tested live before it saves
+uv run setup   # arrow-key wizard: LLM + paper account live-tested, other keys format-checked
 uv run app     # start the app on http://127.0.0.1:8000
 ```
 
@@ -110,6 +110,8 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `LLM_MODEL` | `gpt-6-luna` | Model for every role without an override |
 | `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
 | `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
+| `TAVILY_API_KEY` | Not set | News web search, first fallback behind Olostep |
+| `FIRECRAWL_API_KEY` | Not set | News web search, second fallback behind Olostep |
 | `BAKO_API_KEY` | Not set | Forecast for the run's outlook horizon (TimesFM via Bako); without it, a local ridge model on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |

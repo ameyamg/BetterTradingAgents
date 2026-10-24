@@ -111,6 +111,8 @@ FIELD_GROUPS: list[dict[str, Any]] = [
         "fields": [
             _field("finnhub_api_key", "FINNHUB_API_KEY", "Finnhub API key", secret=True, hint="Profiles, fundamentals, company news; falls back to yfinance"),
             _field("olostep_api_key", "OLOSTEP_API_KEY", "Olostep API key", secret=True, hint="News search and Reddit/StockTwits sentiment"),
+            _field("tavily_api_key", "TAVILY_API_KEY", "Tavily API key", secret=True, hint="News web search, first fallback behind Olostep"),
+            _field("firecrawl_api_key", "FIRECRAWL_API_KEY", "Firecrawl API key", secret=True, hint="News web search, second fallback behind Olostep"),
             _field("bako_api_key", "BAKO_API_KEY", "Bako API key", secret=True, hint="TimesFM price predictions via Bako, the hosted forecast for the run's outlook horizon; falls back to the local trend model"),
         ],
     },

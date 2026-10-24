@@ -11,7 +11,7 @@ _TMP = Path(tempfile.mkdtemp()) / "portfolio_test.db"
 os.environ["DB_PATH"] = str(_TMP)
 
 from app.tools.indicators import compute_indicators, historical_forecast, macd  # noqa: E402
-from app.tools.market_data import _normalize_bako_forecast  # noqa: E402
+from app.tools.market_data import _normalize_bako_forecast, _news_items_from_rows  # noqa: E402
 from app.outlook import horizon_days as outlook_horizon  # noqa: E402
 from app import discovery  # noqa: E402
 from app.discovery import rank_candidates  # noqa: E402
@@ -72,6 +72,21 @@ assert _normalize_bako_forecast({"data": []}, 100, 5) is None
 assert _normalize_bako_forecast({"data": [{"price": 101}]}, 100, 5) is None  # too short
 assert _normalize_bako_forecast({"data": [{"date": "x"}] * 5}, 100, 5) is None  # no price
 print("Bako normalizer OK: calendar-mapped rows, path, method tag, short/gap payloads")
+
+# Generic search-row mapper (Tavily "content" / Firecrawl "description"):
+# rows without a title or a safe http(s) URL are dropped.
+_rows = [
+    {"title": "Nvidia news", "url": "https://www.reuters.com/article/nvidia", "content": "chip demand" * 40},
+    {"title": "No url", "url": "", "content": "x"},
+    {"title": "Javascript url", "url": "javascript:alert(1)", "content": "x"},
+    {"url": "https://example.com", "content": "no title"},
+]
+_mapped = _news_items_from_rows(_rows, "content")
+assert len(_mapped) == 1 and _mapped[0]["source"] == "reuters.com", _mapped
+assert _mapped[0]["summary"] == ("chip demand" * 40)[:300]  # capped at 300 chars
+_fc_rows = [{"title": "AMD news", "url": "https://firecrawl.dev/x", "description": "cpus"}]
+assert _news_items_from_rows(_fc_rows, "description")[0]["summary"] == "cpus"
+print("search-row mapper OK: tavily/firecrawl shapes, unsafe rows dropped, summary capped")
 
 short = compute_indicators([1, 2, 3, 4, 5], [2, 3, 4, 5, 6], [0, 1, 2, 3, 4], [10] * 5)
 assert "macd" not in short and "atr_14" not in short and "bollinger_percent_b" not in short
