@@ -50,8 +50,8 @@ Paper trading only. Research base: the
 
 ```mermaid
 flowchart LR
-    T["📈 Tickers<br/>up to five"] --> D["📡 Market data"]
-    D --> S["🔬 Researchers in parallel<br/>market · technical · fundamental · news · sentiment · forecast"]
+    T["📈 Tickers<br/>up to five"] --> D["📡 Market data<br/>yfinance core · optional Finnhub / Olostep / Bako"]
+    D --> S["🔬 Researchers in parallel<br/>market · technical · fundamental · news<br/>sentiment (crowd proxy) · forecast (hosted → local trend)"]
     S --> B["⚔️ Bull vs bear debate<br/>+ judge at Max · skipped at Fast"]
     B --> PM["👔 Portfolio Manager"]
     TR["📜 Every call graded vs SPY"] -.-> PM
