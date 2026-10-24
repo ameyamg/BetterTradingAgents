@@ -33,8 +33,12 @@ OLOSTEP_SEARCH = "https://api.olostep.com/v1/searches"
 OLOSTEP_SCRAPE = "https://api.olostep.com/v1/scrapes"
 # Bako serves daily ML price predictions per symbol (TimesFM on Vertex AI
 # plus a TF.js model, refreshed every day); free plan is 100 calls/day.
+# Rows are calendar days (live-probed 2026-10-24: 100 contiguous rows,
+# weekends included), so trading-day horizons map onto row
+# round(step * CALENDAR_PER_TRADING_DAY).
 # https://api.bako.co/docs
 BAKO_PREDICTIONS = "https://api.bako.co/v1/predictions"
+CALENDAR_PER_TRADING_DAY = 365.0 / 252.0
 
 _price_cache: dict[str, tuple[float, float]] = {}  # ticker -> (price, fetched_at)
 _CACHE_TTL = 60.0
@@ -300,29 +304,40 @@ def _normalize_bako_forecast(
     """Map a Bako /v1/predictions response onto the app's forecast fields.
 
     Rows are {date, price} calendar days starting at the prediction run date,
-    so row `horizon - 1` mirrors the step index the other providers use. Bako
-    is point-only: the +/- band stays volatility-derived
+    while horizons count trading days, so step k reads the row at calendar
+    offset round(k * CALENDAR_PER_TRADING_DAY); the farthest step must have a
+    row or the payload is unusable (never silently clamped to a shorter
+    horizon). Bako is point-only: the +/- band stays volatility-derived
     (risk.forecast_noise_pct) exactly like every other provider, so the
     risk-gate math is untouched.
     """
     rows = payload.get("data")
-    if not isinstance(rows, list) or len(rows) < horizon:
+    if not isinstance(rows, list) or not rows:
         return None
-    point = rows[horizon - 1]
-    if not isinstance(point, dict):
+    last_index = round(horizon * CALENDAR_PER_TRADING_DAY)
+    if last_index >= len(rows):
         return None
-    price = point.get("price")
-    if not isinstance(price, (int, float)) or not isfinite(float(price)):
+
+    def row_price(step: int) -> float:
+        price = rows[round(step * CALENDAR_PER_TRADING_DAY)].get("price")
+        if not isinstance(price, (int, float)) or not isfinite(float(price)):
+            raise ValueError("bad price row")
+        return float(price)
+
+    try:
+        path = [round(row_price(step), 2) for step in range(1, horizon + 1)]
+    except (ValueError, AttributeError, KeyError):
         return None
-    price = float(price)
+    price = path[-1]
     if current_price <= 0 or price <= 0:
         return None
     return {
-        "forecast_price_5d": round(price, 2),
+        "forecast_price_5d": price,
         "forecast_change_5d_pct": round((price / current_price - 1) * 100, 2),
         "forecast_trend_r2": None,
         "forecast_window_days": None,
         "forecast_horizon_days": horizon,
+        "forecast_path": path,
         "forecast_method": "bako-timesfm",
     }
 

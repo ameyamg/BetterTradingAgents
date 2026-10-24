@@ -4,8 +4,10 @@ The LLM never calculates numbers; these functions do it and the Technical
 Analyst agent only interprets the results.
 """
 
-from math import exp, log
-from statistics import linear_regression, mean, pstdev
+from math import exp
+
+import numpy as np
+from statistics import mean, pstdev
 
 
 def sma(values: list[float], window: int) -> float | None:
@@ -122,33 +124,95 @@ def volume_stats(volumes: list[float], window: int = 20) -> dict:
     }
 
 
+RIDGE_LAGS = 5
+RIDGE_ALPHA = 1.0
+
+
+def _ridge_fit(x: np.ndarray, y: np.ndarray):
+    """Ridge on z-scored lagged-return features; returns a predict(rows) closure.
+
+    Features are daily log returns (tiny, near-identical scale), so the design
+    matrix is z-scored per column: otherwise RIDGE_ALPHA drowns the data term
+    and every coefficient shrinks to zero.
+    """
+    x_mean, x_std = x.mean(axis=0), x.std(axis=0)
+    x_std = np.where(x_std > 0, x_std, 1.0)
+    y_mean = float(y.mean())
+    xs = (x - x_mean) / x_std
+    beta = np.linalg.solve(
+        xs.T @ xs + RIDGE_ALPHA * np.eye(xs.shape[1]), xs.T @ (y - y_mean)
+    )
+
+    def predict(rows: np.ndarray) -> np.ndarray:
+        return ((rows - x_mean) / x_std) @ beta + y_mean
+
+    return predict
+
+
 def historical_forecast(
-    closes: list[float], horizon: int = 5, window: int = 60
+    closes: list[float], horizon: int = 5, window: int = 120
 ) -> dict | None:
-    """Project a log-linear price trend; a baseline, not a probability."""
+    """Project prices with a ridge regression on lagged daily log returns.
+
+    One fit per step out to `horizon` (direct multi-step), so a far step never
+    compounds the errors of near ones. A baseline, not a probability: the
+    reported R2 is out-of-sample skill at the full horizon, and daily-return
+    predictability is near zero by nature, so a non-positive R2 means "no
+    local signal" rather than a broken model.
+    """
     if horizon < 1 or len(closes) < 30:
         return None
     sample = closes[-window:]
     if any(price <= 0 for price in sample):
         return None
 
-    values = [log(price) for price in sample]
-    count = len(values)
-    slope, intercept = linear_regression(range(count), values)
-    fitted = [intercept + slope * x for x in range(count)]
-    y_mean = mean(values)
-    residual = sum((actual - predicted) ** 2 for actual, predicted in zip(values, fitted))
-    total = sum((value - y_mean) ** 2 for value in values)
-    r_squared = max(0.0, min(1.0, 1 - residual / total)) if total else 0.0
-    forecast_price = exp(intercept + slope * (count - 1 + horizon))
+    logs = np.log(np.asarray(sample, dtype=float))
+    rets = np.diff(logs)
+    m = len(sample)
+    # Rows for the farthest step: one feature window per start day.
+    if m - RIDGE_LAGS - horizon < 20:
+        return None
+    windows = np.lib.stride_tricks.sliding_window_view(rets, RIDGE_LAGS)
+
+    def targets(step: int, rows: int) -> np.ndarray:
+        """Step-day log return starting where each feature window ends.
+
+        Feature window j ends at day t = RIDGE_LAGS + j, so its target is
+        y_all[t] = logs[t+step] - logs[t].
+        """
+        return (logs[step:] - logs[:-step])[RIDGE_LAGS : RIDGE_LAGS + rows]
+
+    x_last = windows[-1]
+    path = []
+    for step in range(1, horizon + 1):
+        rows = m - step - RIDGE_LAGS
+        predict = _ridge_fit(windows[:rows], targets(step, rows))
+        path.append(round(sample[-1] * exp(float(predict(x_last))), 2))
+
+    # Skill stat at the full horizon: hold out the last 30 fits when there is
+    # room, otherwise score the in-sample fit (small histories only).
+    rows = m - horizon - RIDGE_LAGS
+    y = targets(horizon, rows)
+    if rows >= 50:
+        split = rows - 30
+        predicted = _ridge_fit(windows[:split], y[:split])(windows[split:rows])
+        actual = y[split:]
+    else:
+        predicted = _ridge_fit(windows[:rows], y)(windows[:rows])
+        actual = y
+    resid = float(np.sum((actual - predicted) ** 2))
+    total = float(np.sum((actual - actual.mean()) ** 2))
+    r_squared = 1.0 if (total == 0 and resid == 0) else (0.0 if total == 0 else 1 - resid / total)
+    r_squared = max(-1.0, min(1.0, r_squared))
 
     return {
-        "forecast_price_5d": round(forecast_price, 2),
-        "forecast_change_5d_pct": round((forecast_price / closes[-1] - 1) * 100, 2),
+        "forecast_price_5d": path[-1],
+        "forecast_change_5d_pct": round((path[-1] / closes[-1] - 1) * 100, 2),
         "forecast_trend_r2": round(r_squared, 3),
-        "forecast_window_days": count,
+        "forecast_window_days": len(sample),
         "forecast_horizon_days": horizon,
-        "forecast_method": "log_linear_trend",
+        "forecast_path": path,
+        "forecast_method": "ridge_lag",
     }
 
 

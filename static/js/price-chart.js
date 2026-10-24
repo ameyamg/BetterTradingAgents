@@ -7,7 +7,7 @@ import { escapeHtml } from "./util.js";
 
 const HEIGHT = 190;
 const PAD = { top: 14, right: 16, bottom: 24, left: 46 };
-const FUTURE_STEPS = 6; // room at the right edge for the 5-day forecast segment
+const FUTURE_STEPS = 6; // legacy fallback when an old run has no forecast path
 
 const state = new WeakMap();
 let resizeTimer = null;
@@ -54,6 +54,13 @@ function renderChart(target) {
   const forecastPrice = analysis.forecast_price_5d;
   const bandPct = analysis.forecast_band_pct;
   const currentPrice = closes[closes.length - 1];
+  // Per-step forecast prices out to the horizon (Bako path or local ridge
+  // path). One point per trading step, so the future part of the chart is
+  // drawn at its real length instead of a fixed 6-slot stub.
+  const forecastPath = (Array.isArray(analysis.forecast_path) ? analysis.forecast_path : [])
+    .filter((v) => v != null && Number.isFinite(v))
+    .map(Number);
+  const hasPath = forecastPrice != null && forecastPath.length >= 1;
 
   let markIdx = -1;
   for (let i = 0; i < dates.length && dates[i] <= asOfDate; i += 1) markIdx = i;
@@ -63,6 +70,7 @@ function renderChart(target) {
   if (analysisPrice != null) yValues.push(analysisPrice);
   if (forecastPrice != null) {
     yValues.push(forecastPrice);
+    if (hasPath) yValues.push(...forecastPath);
     if (bandPct != null) {
       yValues.push(forecastPrice * (1 + bandPct / 100));
       yValues.push(forecastPrice * (1 - bandPct / 100));
@@ -77,7 +85,7 @@ function renderChart(target) {
   const W = Math.max(320, Math.round(target.clientWidth || 640));
   const innerW = W - PAD.left - PAD.right;
   const innerH = HEIGHT - PAD.top - PAD.bottom;
-  const future = forecastPrice != null ? FUTURE_STEPS : 0;
+  const future = forecastPrice != null ? (hasPath ? forecastPath.length : FUTURE_STEPS) : 0;
   const total = closes.length - 1 + future;
   const x = (i) => PAD.left + (i * innerW) / total;
   const y = (v) => PAD.top + innerH - ((v - min) / (max - min)) * innerH;
@@ -137,11 +145,20 @@ function renderChart(target) {
         `<text class="chart-label" x="${fx.toFixed(1)}" y="${(y(upper) - 6).toFixed(1)}" text-anchor="end">±${Number(bandPct).toFixed(1)}% band</text>`
       );
     }
+    if (hasPath) {
+      // The full per-step path: one point per trading step after the last close.
+      const pathPoints = forecastPath
+        .map((p, i) => `${x(closes.length + i).toFixed(1)},${y(p).toFixed(1)}`)
+        .join(" ");
+      marks.push(`<polyline class="chart-forecast" points="${lastX.toFixed(1)},${lastY.toFixed(1)} ${pathPoints}" fill="none"></polyline>`);
+    } else {
+      // Legacy rows without a path: one straight segment to the endpoint.
+      marks.push(`<line class="chart-forecast" x1="${lastX.toFixed(1)}" y1="${lastY.toFixed(1)}" x2="${fx.toFixed(1)}" y2="${fy.toFixed(1)}"></line>`);
+    }
     // Keep the forecast label clear of the current-price label when the two
     // points are close in price (their y positions can otherwise collide).
     const forecastLabelY = Math.abs(fy - lastY) < 24 ? Math.max(fy, lastY) + 26 : fy + 14;
     marks.push(
-      `<line class="chart-forecast" x1="${lastX.toFixed(1)}" y1="${lastY.toFixed(1)}" x2="${fx.toFixed(1)}" y2="${fy.toFixed(1)}"></line>`,
       `<circle class="chart-forecast-dot" cx="${fx.toFixed(1)}" cy="${fy.toFixed(1)}" r="3.5"></circle>`,
       `<text class="chart-label" x="${fx.toFixed(1)}" y="${forecastLabelY.toFixed(1)}" text-anchor="end">Forecast $${Number(forecastPrice).toFixed(2)} (estimate)</text>`
     );
@@ -154,6 +171,8 @@ function renderChart(target) {
     if (c < closes[loIdx]) loIdx = i;
   });
   const changePct = closes[0] ? ((currentPrice / closes[0]) - 1) * 100 : 0;
+  const horizonDays = Number(analysis.forecast_horizon_days) || 5;
+  const horizonLabel = horizonDays === 1 ? "Next-session forecast" : `${horizonDays}-day forecast`;
   const summary =
     `Six months to ${dates[dates.length - 1]}: high $${closes[hiIdx].toFixed(2)} on ${dates[hiIdx]}, `
     + `low $${closes[loIdx].toFixed(2)} on ${dates[loIdx]}, change ${changePct >= 0 ? "+" : ""}${changePct.toFixed(1)}%. `
@@ -162,7 +181,7 @@ function renderChart(target) {
       : "")
     + `Current $${Number(currentPrice).toFixed(2)}. `
     + (forecastPrice != null
-      ? `5-day forecast $${Number(forecastPrice).toFixed(2)} (estimate${bandPct != null ? `, ±${Number(bandPct).toFixed(1)}% noise band` : ""}).`
+      ? `${horizonLabel} $${Number(forecastPrice).toFixed(2)} (estimate${bandPct != null ? `, ±${Number(bandPct).toFixed(1)}% noise band` : ""}).`
       : "No forecast was recorded.");
 
   target.innerHTML = `

@@ -183,28 +183,6 @@ def get_chat_llm() -> Any:
     return _llms.get("chat")
 
 
-async def llm_ping() -> tuple[bool, str]:
-    """One-token live check of the configured LLM endpoint (P2.7 onboarding).
-    Builds a throwaway plain-text client so the cached role LLMs are never
-    touched, and caps the reply at a few tokens: the words are irrelevant,
-    only reachability is."""
-    if not settings.llm_configured:
-        return False, "no LLM API key saved yet"
-    try:
-        client = _build_llm("manager", json_mode=False, stream=False)
-    except Exception as exc:  # noqa: BLE001 - bad base_url etc.
-        return False, f"could not build the LLM client: {exc}"
-    client.max_tokens = 8
-    try:
-        reply = await asyncio.to_thread(
-            client.call,
-            [{"role": "user", "content": "Reply with the single word: ready"}],
-        )
-    except Exception as exc:  # noqa: BLE001 - any provider failure is the answer
-        return False, str(exc)[:300]
-    return True, str(reply)[:200]
-
-
 def _drop_json_mode(key: str) -> Any:
     """Rebuild a key's LLM without response_format after the provider
     rejected it (feature-detect on first use, not with a probe call)."""
@@ -873,6 +851,10 @@ async def analyze_ticker(
             indicators.update(hosted_forecast)
             market.sources["forecast"] = "bako"
         else:
+            # Replace compute_indicators' default-5-day projection so the
+            # stored analysis matches the run's horizon when Bako is absent.
+            if local_forecast:
+                indicators.update(local_forecast)
             market.sources["forecast"] = "local"
     else:
         # "none" is filtered out of the UI's provider line.
@@ -1340,6 +1322,7 @@ async def analyze_ticker(
         forecast_trend_r2=indicators.get("forecast_trend_r2"),
         forecast_method=indicators.get("forecast_method", ""),
         forecast_horizon_days=indicators.get("forecast_horizon_days"),
+        forecast_path=indicators.get("forecast_path"),
         forecast_band_pct=None if forecast_band_pct is None else round(forecast_band_pct, 2),
         forecast_z=None if forecast_z_value is None else round(forecast_z_value, 2),
         decision=decision,
