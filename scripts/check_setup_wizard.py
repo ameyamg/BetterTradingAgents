@@ -160,7 +160,7 @@ print("fresh flow OK: LLM retried to a pass; redo re-ticked only Olostep and dro
 # ---- flow 2: detected LLM reused and live-tested; no integration ticks ------
 reset_settings(llm_api_key="sk-existing",
                llm_base_url="https://api.deepseek.com/v1",
-               llm_model="deepseek-v4-flash")
+               llm_model="deepseek-flash")
 llm_calls = []
 tests = {
     "llm": lambda url, key, model: (
