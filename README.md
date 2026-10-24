@@ -109,9 +109,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `LLM_API_KEY` | Not set | Enables the LLM agents; without it, mock mode |
 | `LLM_MODEL` | `gpt-6-luna` | Model for every role without an override |
 | `FINNHUB_API_KEY` | Not set | Fundamentals and news (yfinance fallback) |
-| `OLOSTEP_API_KEY` | Not set | News search and social sentiment |
-| `TAVILY_API_KEY` | Not set | News web search, first fallback behind Olostep |
-| `FIRECRAWL_API_KEY` | Not set | News web search, second fallback behind Olostep |
+| `OLOSTEP_API_KEY` | Not set | Web search + scraping for news, and social sentiment (recommended); without it, news falls back to any other configured search key, then yfinance |
 | `BAKO_API_KEY` | Not set | Forecast for the run's outlook horizon (TimesFM via Bako); without it, a local ridge model on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
