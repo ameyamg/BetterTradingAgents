@@ -199,6 +199,14 @@ class Settings:
         "true",
         "yes",
     )
+    # Guided first-run setup card on the home page (P2.7). Off for now: it
+    # kept nagging profiles whose keys come from .env names it does not count.
+    # Set ONBOARDING_ENABLED=1 to bring it back.
+    onboarding_enabled: bool = _env("ONBOARDING_ENABLED", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     alpaca_max_order_usd: float = float(_env("ALPACA_MAX_ORDER_USD", "10000"))
     alpaca_max_orders_per_day: int = int(_env("ALPACA_MAX_ORDERS_PER_DAY", "20"))
     alpaca_max_decision_age_hours: float = float(

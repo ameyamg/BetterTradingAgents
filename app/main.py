@@ -232,7 +232,10 @@ async def _onboarding_payload() -> dict:
         {"key": "autopilot", "label": "Autopilot enabled", "ok": await automation.enabled()},
     ]
     return {
-        "needed": not dismissed
+        # The card renders only when onboarding is enabled AND the profile
+        # still misses a hard gate (LLM or Alpaca) AND it was not dismissed.
+        "needed": settings.onboarding_enabled
+        and not dismissed
         and not (settings.llm_configured and settings.alpaca_configured),
         "dismissed": dismissed,
         "steps": steps,

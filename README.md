@@ -113,6 +113,7 @@ sign-up links and what is optional: wiki [Providers](https://github.com/kingabzp
 | `BAKO_API_KEY` | Not set | Forecast for the run's outlook horizon (TimesFM via Bako); without it, a local ridge model on yfinance closes |
 | `ALPACA_API_KEY_ID` | Not set | Alpaca **paper** key; enables paper trading |
 | `ALPACA_TRADING_ENABLED` | `0` | Kill switch for order submissions |
+| `ONBOARDING_ENABLED` | `0` | Show the guided first-run setup card on the home page |
 | `AUTOMATION_*` | see `.env.example` | Autopilot schedule, candidates, confidence bar, budget, webhook |
 | `WEBHOOK_URL` | Not set | One plain-text POST per finished autopilot session |
 

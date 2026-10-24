@@ -15,6 +15,9 @@ from types import SimpleNamespace
 # Isolated DB and cleared env before app.config is imported.
 _TMP = Path(tempfile.mkdtemp()) / "onboarding_test.db"
 os.environ["DB_PATH"] = str(_TMP)
+# The card is disabled by default (ONBOARDING_ENABLED=0); the check tests the
+# card itself, so it opts back in.
+os.environ["ONBOARDING_ENABLED"] = "1"
 for _var in (
     "LLM_API_KEY",
     "LLM_BASE_URL",
