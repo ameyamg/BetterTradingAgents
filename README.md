@@ -151,54 +151,38 @@ Full schema and SSE catalog: wiki [API](https://github.com/kingabzpro/BetterTrad
 
 ## Backtesting
 
-> [!WARNING]
-> Replays are point-in-time strict: at a past decision date the app refuses
-> to use today's fundamentals, later news, market-regime data, or portfolio
-> and memory context, because any of those leaks the future and fakes the
-> result. The one honest historical fundamental source is SEC EDGAR as-filed
-> data (`--sec-edgar-fundamentals`).
-
-Calibrated mock sweep (2026-10-21, 6 tickers, 23 dates, 138 decisions per
-arm, holdout 2026-02-15, graded after costs, seed 7):
-
-| Configuration | Test return | Mean alpha | Max drawdown |
-|---|---:|---:|---:|
-| Fast (3 agents) | -9.19% | -0.71% | 44.62% |
-| SPY (buy & hold) | +12.41% | - | - |
-| Pro (7 agents) | +45.04% | +0.37% | 46.94% |
-| Max (10 agents + judge) | +94.87% | +1.80% | **24.50%** |
-
-Mock verdict: only Max's edge over Fast is statistically separated (95% CI
-excludes zero), samples sit below the promotion gate, so read as directional.
-Re-validated 2026-10-23 (every number and decision reproduced) and 2026-10-25.
-
-Live replay (2026-10-25, real DeepSeek V4.1 Flash agents, all data APIs live,
-one run, 138 decisions per arm, indicative only):
-
-| Configuration | Total return | Hit rate | Max drawdown | Cost |
-|---|---:|---:|---:|---:|
-| Fast (3 agents) | +132.21% | 54.9% | 43.58% | $0.61 |
-| Pro (7 agents) | +55.94% | 53.5% | 40.63% | $0.79 |
-| Max (10 agents) | +82.29% | 53.8% | **29.57%** | $0.94 |
-| SPY (buy & hold) | +28.77% | - | - | - |
-
-Live verdict: the whole 414-analysis run billed **$2.34** (about $0.004-0.007
-per analysis). Two limitations: replayed dates carry LLM memorization risk,
-and we cannot go back in time to fetch the news, social sentiment, or
-fundamentals the market actually saw then (using today's would leak the
-future), so those agents ran on date-gated thin data. Result: the return
-ordering flips vs the mock sweep, so trust the calibrated table above for
-returns and take the drawdown discipline (Max best in both runs) as the
-reproducible finding. Which depth earns more with full context is a question
-for live paper trading.
+Replay past stock decisions and grade them against SPY after trading costs.
+Mock mode is free and deterministic; add `--llm` for real agents with a cost
+confirmation. No paper account is required.
 
 ```bash
-uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30
-uv run python scripts/backtest_sweep.py
+uv run python -m app.backtest --tickers NVDA,AMD --start 2026-03-01 --end 2026-06-30
 ```
 
-[report-sweep.md](backtests/report-sweep.md) · [report-paired-depth.md](backtests/report-paired-depth.md) ·
-wiki [Backtesting](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting)
+**Mock results: holdout only, 60 decisions per depth.**
+
+| Depth | Cumulative | Mean alpha | Max drawdown |
+|---|---:|---:|---:|
+| Fast | -9.19% | -0.71% | 44.62% |
+| Pro | +45.04% | +0.37% | 46.94% |
+| Max | +94.87% | +1.80% | 24.50% |
+
+**Real-LLM results: full grid, 138 decisions per depth (DeepSeek V4.1 Flash).**
+
+| Depth | Cumulative | Hit rate | Max drawdown |
+|---|---:|---:|---:|
+| Fast | +132.21% | 54.9% | 43.58% |
+| Pro | +55.94% | 53.5% | 40.63% |
+| Max | +82.29% | 53.8% | 29.57% |
+
+Both used six tickers over 2025-06-02 to 2026-09-14, with a 2026-02-15
+holdout. The tables cover different date slices. Returns compound simulated
+decision windows, not a funded portfolio; samples do not establish a winning
+depth, and historical LLM runs carry memorization risk.
+
+Reports and reproducibility manifests go to `backtests/`.
+See the [Backtesting wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting)
+for results, holdout comparisons, data limits, and reproducibility commands.
 
 ## Development
 

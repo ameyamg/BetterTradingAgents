@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-25T09:36:43+00:00",
+  "code": {
+    "revision": "ba92ccc",
+    "dirty": true
+  },
+  "decision_policy_version": "2026-10-e",
+  "config": {
+    "mode": "mock",
+    "name": "mock",
+    "model": "rule-based mock",
+    "tickers": [
+      "NVDA"
+    ],
+    "start": "2026-03-01",
+    "end": "2026-06-30",
+    "step_days": 21,
+    "horizon_days": 21,
+    "depth": "fast",
+    "outlook": "short_term",
+    "cost_pct": 0.1,
+    "short": false,
+    "fundamentals": "sec_edgar",
+    "holdout": null,
+    "seed": 7,
+    "excluded_analysts": [],
+    "policy_version": "2026-10-e",
+    "debate_rounds": 2
+  },
+  "data": {
+    "snapshot_hashes": {
+      "NVDA@2026-03-01": "sha256:b8c20f4374cd643c",
+      "NVDA@2026-03-22": "sha256:2e1957e5a1888b1c",
+      "NVDA@2026-04-12": "sha256:cb260b2499a46a71",
+      "NVDA@2026-05-03": "sha256:10cb93851c519b86",
+      "NVDA@2026-05-24": "sha256:e8849ad117d8992d",
+      "NVDA@2026-06-14": "sha256:9ab7bead4f273d5d"
+    }
+  },
+  "random_seeds": {
+    "bootstrap": 7,
+    "bootstrap_reps": 2000,
+    "pipeline": "deterministic (mock mode)"
+  }
+}
