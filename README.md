@@ -166,6 +166,8 @@ holdout. Sweep of 2026-10-21, 6 tickers, 23 dates, 138 decisions per arm:
 - Judge halves worst drawdown; mock agents, real-LLM replays cost-gated
 - Validated 2026-10-22, re-validated 2026-10-23 after the simplify pass: sweep
   re-run reproduced every number and all 138 decisions per arm identically
+- Re-validated 2026-10-25 after the SEC tag fix (#18): as-filed fundamentals
+  pick the freshest filed tag, so tag switchers like NVDA replay correctly
 
 ```bash
 uv run python -m app.backtest --tickers NVDA,AMD,META --start 2026-03-01 --end 2026-06-30
