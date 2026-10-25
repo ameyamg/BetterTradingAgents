@@ -73,6 +73,11 @@ class Settings:
     # 429/5xx/malformed-output failures (0 = fail fast). Defaults = today.
     llm_max_tokens: int = max(0, int(_env("MAX_TOKENS", "0")))
     llm_max_retries: int = min(10, max(0, int(_env("LLM_MAX_RETRIES", "2"))))
+    # Cap on in-flight LLM calls across the whole app. Parallel researchers +
+    # multi-ticker runs can burst past what shared endpoints allow (Modal's
+    # shared DeepSeek endpoints cap at 16 concurrent per workspace), and every
+    # bounced call costs a retry round-trip. 0 = unlimited (default off).
+    llm_concurrency: int = max(0, int(_env("LLM_CONCURRENCY", "12")))
     # Optional provider-specific reasoning effort (e.g. "none"/"low" for GLM).
     llm_reasoning_effort: str = _env("LLM_REASONING_EFFORT")
     llm_reasoning_effort_manager: str = _env("LLM_REASONING_EFFORT_MANAGER")

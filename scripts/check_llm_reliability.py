@@ -241,6 +241,35 @@ async def retry_checks():
     assert events[-1][0] == "agent_failed"
     print("unknown-failure degradation OK: no blind retry, agent_failed emitted")
 
+    # ---- LLM_CONCURRENCY: the app-wide gate caps in-flight agent calls ------
+    # Shared endpoints (e.g. Modal's, 16 concurrent per workspace) bounce
+    # bursts; the gate keeps the app under the ceiling and rebuilds live when
+    # the setting changes.
+    overlap = {"now": 0, "max": 0}
+
+    async def slow_kick(agent, task):  # noqa: ARG001
+        overlap["now"] += 1
+        overlap["max"] = max(overlap["max"], overlap["now"])
+        await asyncio.sleep(0.05)
+        overlap["now"] -= 1
+        return ({"decision": "BUY", "confidence": 0.9, "summary": "ok"},
+                {"total_tokens": 1})
+
+    workflow._kick_once = slow_kick
+    settings.llm_concurrency = 1
+    await asyncio.gather(*[
+        workflow._run_agent(FakeMod(), "NVDA", emit) for _ in range(3)
+    ])
+    assert overlap["max"] == 1, overlap  # gate serialized the three calls
+    settings.llm_concurrency = 0
+    overlap = {"now": 0, "max": 0}
+    await asyncio.gather(*[
+        workflow._run_agent(FakeMod(), "NVDA", emit) for _ in range(3)
+    ])
+    assert overlap["max"] == 3, overlap  # 0 = unlimited: all three at once
+    settings.llm_concurrency = 12
+    print("LLM_CONCURRENCY gate OK: 1 serializes, 0 runs unlimited")
+
 
 asyncio.run(retry_checks())
 

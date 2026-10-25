@@ -75,6 +75,22 @@ _llm_roles_initialized: set[str] = set()
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 _BACKOFF_SECONDS = (1.0, 4.0, 16.0, 60.0)  # HTTP 429/5xx: wait, retry, wait longer
 
+# LLM_CONCURRENCY: shared endpoints cap concurrent requests per workspace
+# (e.g. Modal's shared DeepSeek endpoints at 16), and a multi-ticker run can
+# burst past that. One app-wide gate rebuilds live when the setting changes,
+# like the per-role LLM cache does.
+_llm_gate: asyncio.Semaphore | None = None
+_llm_gate_limit = -1
+
+
+def _gate() -> asyncio.Semaphore | None:
+    global _llm_gate, _llm_gate_limit
+    limit = max(0, int(settings.llm_concurrency or 0))
+    if limit != _llm_gate_limit:
+        _llm_gate = asyncio.Semaphore(limit) if limit else None
+        _llm_gate_limit = limit
+    return _llm_gate
+
 
 # Provider prefixes that only ever existed for litellm routing. The SDK client
 # is pointed at one OpenAI-compatible base_url, so the prefix must be stripped
@@ -540,14 +556,21 @@ async def _run_agent(
                     task = mod.build_task(agent, ticker, **task_payload)
                     if correction is not None:
                         task.description = correction + task.description
-                    if getattr(llm, "stream", False):
-                        # One sink per agent run: concurrent agents of the same
-                        # role never see each other's tokens (ROADMAP 3.2).
-                        data, usage = await _kick_streamed(
-                            agent, task, ticker, agent_name, emit
-                        )
+                    async def _kick() -> tuple[dict, dict]:
+                        if getattr(llm, "stream", False):
+                            # One sink per agent run: concurrent agents of the
+                            # same role never see each other's tokens (ROADMAP 3.2).
+                            return await _kick_streamed(
+                                agent, task, ticker, agent_name, emit
+                            )
+                        return await _kick_once(agent, task)
+
+                    gate = _gate()
+                    if gate is None:
+                        data, usage = await _kick()
                     else:
-                        data, usage = await _kick_once(agent, task)
+                        async with gate:
+                            data, usage = await _kick()
                     # Let token-forward tasks scheduled by the sink reach the
                     # queues before agent_completed closes the pane's stream.
                     await asyncio.sleep(0)
