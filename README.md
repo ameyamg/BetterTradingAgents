@@ -2,11 +2,11 @@
 
 <img src="static/logo-full.png" width="700" alt="BetterTradingAgents multi-agent market intelligence"/>
 
-**Real-time, multi-agent AI stock research and paper trading, powered by CrewAI.**
+**Real-time, multi-agent AI stock research and paper trading, on the OpenAI Agents SDK.**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![CrewAI](https://img.shields.io/badge/CrewAI-multi--agent-ff6b35)](https://www.crewai.com/)
+[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI_Agents_SDK-multi--agent-412991)](https://openai.github.io/openai-agents-python/)
 [![uv](https://img.shields.io/badge/uv-managed-de5fe9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](#disclaimer)
 
