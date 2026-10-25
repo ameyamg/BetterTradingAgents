@@ -100,10 +100,10 @@ assert workflow._classify_failure(RuntimeError("response_format is not supported
 assert workflow._classify_failure(RuntimeError("connection reset by peer")) == "other"
 print("failure classification OK")
 
-# ---- provider compatibility: tasks must not force crewai's json_schema ----
-# output_pydantic makes crewai replace our json_object with a strict
-# json_schema request (via the parse API); providers like api.deepseek.com
-# reject that with a 400 on every call.
+# ---- provider compatibility: agent calls must not force json_schema ----
+# structured output (output_type) makes the SDK replace our json_object with a
+# strict json_schema request; providers like api.deepseek.com reject that with
+# a 400 on every call.
 from app.agents import (  # noqa: E402
     bear,
     bull,

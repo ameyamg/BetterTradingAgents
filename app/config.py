@@ -6,8 +6,9 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-# Must happen before crewai is imported anywhere.
-os.environ.setdefault("CREWAI_TELEMETRY_OPT_OUT", "true")
+# Must happen before the agents SDK is imported anywhere: keeps the tracer
+# from ever warning about or exporting to an absent OPENAI_API_KEY.
+os.environ.setdefault("OPENAI_AGENTS_DISABLE_TRACING", "1")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
