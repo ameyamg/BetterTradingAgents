@@ -6,7 +6,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![OpenAI Agents SDK](https://img.shields.io/badge/OpenAI_Agents_SDK-multi--agent-412991)](https://openai.github.io/openai-agents-python/)
+![OpenAI Agents SDK](https://custom-icon-badges.demolab.com/badge/OpenAI_Agents_SDK-412991?logo=openai&logoColor=white)
 [![uv](https://img.shields.io/badge/uv-managed-de5fe9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](#disclaimer)
 
