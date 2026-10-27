@@ -6,13 +6,15 @@ import { loadPriceChart } from "./price-chart.js";
 import { $, escapeAttr, escapeHtml, fmtUsd, formatDateTime } from "./util.js";
 
 let infoPromise = null;
-let info = { status: null, positions: [] };
+let info = { status: null, positions: [], orders: [] };
 
 // Alpaca accepts at most 6 decimals on share quantities; always round DOWN.
 const floor6 = (value) => Math.floor(value * 1e6) / 1e6;
 const fmtQty = (value) => String(floor6(Number(value)));
 
-// Status plus open positions, fetched once per page and reused by every card.
+// Status, open positions, and recent orders, fetched once per page and reused
+// by every card. The orders list feeds the wash-trade warning below: open
+// orders are reconciled server-side before they are returned.
 export function brokerInfo() {
   if (!infoPromise) {
     infoPromise = (async () => {
@@ -24,7 +26,12 @@ export function brokerInfo() {
             .then((response) => (response.ok ? response.json() : []))
             .catch(() => [])
         : [];
-      return { status, positions };
+      const orders = status?.configured
+        ? await fetch("/api/broker/orders?limit=50")
+            .then((response) => (response.ok ? response.json() : []))
+            .catch(() => [])
+        : [];
+      return { status, positions, orders };
     })();
   }
   return infoPromise.then((value) => {
@@ -62,6 +69,49 @@ function qtyFor(analysis, positions) {
   return floor6((analysis.suggested_size_usd || 10000) / Number(analysis.price));
 }
 
+const TERMINAL_STATUSES = new Set(["filled", "canceled", "cancelled", "expired", "rejected"]);
+
+function workingOrders(ticker, side) {
+  return (info.orders || []).filter(
+    (order) =>
+      order.ticker === ticker &&
+      order.side === side &&
+      !TERMINAL_STATUSES.has(String(order.status || "").toLowerCase()),
+  );
+}
+
+// Everything a person should know before committing, in plain language:
+// a working opposite-side order (Alpaca rejects the combination as a
+// potential wash trade), and on BUYs whether the position already exists
+// (autopilot never adds to a position; the manual path may, so it warns).
+function orderWarnings(analysis) {
+  const ticker = analysis.ticker;
+  const warnings = [];
+  if (analysis.decision === "SELL") {
+    const blocking = workingOrders(ticker, "buy");
+    if (blocking.length) {
+      const first = blocking[0];
+      const size = first.notional != null ? ` for ${fmtUsd(first.notional)}` : "";
+      warnings.push(
+        `An open buy order${size} (status ${escapeHtml(String(first.status))}) is still working. ` +
+          "Alpaca rejects buy and sell orders working in the same symbol as a potential wash trade: " +
+          "cancel it on the Trades page or wait for it to fill before selling.",
+      );
+    }
+  } else {
+    const held = info.positions.find((position) => position.symbol === ticker);
+    if (held) {
+      const qty = held.quantity != null ? `${Number(held.quantity).toFixed(2)} shares` : "a position";
+      const value = held.market_value != null ? `, ~${fmtUsd(held.market_value)}` : "";
+      warnings.push(
+        `You already hold ${escapeHtml(ticker)} (${qty}${value}). This order adds to the ` +
+          "position; autopilot never adds to a position.",
+      );
+    }
+  }
+  return warnings;
+}
+
 // Inline review step appended to the result card's actions area. Order type,
 // TIF, and extended hours are fixed server-side; they are stated, not options.
 export async function attachPaperOrder(actionsEl, analysis, runId) {
@@ -69,6 +119,7 @@ export async function attachPaperOrder(actionsEl, analysis, runId) {
   const ticker = analysis.ticker;
   const { status, positions } = await brokerInfo();
   const qty = qtyFor(analysis, positions);
+  const warnings = orderWarnings(analysis);
   const heldQty = sellableShares(analysis, positions);
   const refPrice = Number(analysis.price) || 0;
   const capUsd = status.max_order_usd || 0;
@@ -93,6 +144,7 @@ export async function attachPaperOrder(actionsEl, analysis, runId) {
         <div><span>Buying power</span><strong id="paper-bp-${escapeAttr(ticker)}">loading…</strong></div>
         <div><span>Exposure after</span><strong id="paper-exp-${escapeAttr(ticker)}">loading…</strong></div>
       </div>
+      ${warnings.map((text) => `<p class="hint flag-warn paper-warn">${text}</p>`).join("")}
       <div class="chart-holder" id="paper-chart-${escapeAttr(ticker)}"><p class="hint">The six-month price chart loads when the review opens.</p></div>
       <div class="add-row">
         <label for="paper-qty-${escapeAttr(ticker)}">Quantity (shares)</label>
