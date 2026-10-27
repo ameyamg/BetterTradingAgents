@@ -9,8 +9,9 @@ Secrets (API keys) never touch the database: they go to the OS credential
 vault via keyring (Windows Credential Manager, macOS Keychain, Linux
 Secret Service) under the service name below. If no usable keychain
 exists, they fall back to the local DB unencrypted and the UI says so.
-Precedence per field: keychain/DB override > .env default. Reset drops
-every override and restores the .env values captured at import.
+Precedence per configured field: .env > process environment > keychain/DB
+> defaults. Empty values allow saved fallbacks. Reset drops saved values
+and restores the file/environment baseline captured at import.
 """
 
 import logging
@@ -210,6 +211,18 @@ SECRET_NAMES = [f["name"] for f in FIELDS.values() if f["secret"]]
 
 # The .env baseline, captured once at import before any override is applied.
 ENV_DEFAULTS: dict[str, Any] = {name: getattr(settings, name) for name in FIELDS}
+# Config has already loaded .env over the shell. Only explicit, nonempty
+# values take priority; defaults and blank credentials allow saved settings.
+ENV_FIELDS = {
+    name for name, field in FIELDS.items() if os.environ.get(field["env"], "").strip()
+}
+# Accept the same Alpaca aliases as config when deciding source precedence.
+for _name, _alias in (
+    ("alpaca_api_key_id", "ALPACA_API_KEY"),
+    ("alpaca_api_secret_key", "ALPACA_SECRET_KEY"),
+):
+    if os.environ.get(_alias, "").strip():
+        ENV_FIELDS.add(_name)
 
 
 # ---- keychain ---------------------------------------------------------------
@@ -365,6 +378,8 @@ def _clamp(field: dict[str, Any], number: float, name: str) -> float:
 
 
 def _secret_source(name: str, db_secrets: dict[str, str]) -> str:
+    if name in ENV_FIELDS:
+        return "env"
     if keychain_get(name):
         return "keychain"
     if name in db_secrets:
@@ -391,13 +406,15 @@ def apply_overrides() -> None:
     _init_db()
     db_secrets = _db_secrets()
     for name in SECRET_NAMES:
+        if name in ENV_FIELDS:
+            continue
         stored = keychain_get(name) or db_secrets.get(name)
         if stored:
             setattr(settings, name, stored)
     overrides = _db_overrides()
     for name, raw in overrides.items():
         field = FIELDS.get(name)
-        if field is not None:
+        if field is not None and name not in ENV_FIELDS:
             setattr(settings, name, _coerce(field, raw))
     logger.info(
         "[settings] overrides applied (%d keys, keychain=%s)",
@@ -419,6 +436,9 @@ def save(values: dict[str, Any], clear_secrets: list[str]) -> None:
             continue
         if field["secret"] and (value is None or str(value).strip() == ""):
             continue  # blank = unchanged
+        if name in ENV_FIELDS:
+            errors.append(f"{name} is controlled by .env or the process environment; edit it there and restart")
+            continue
         try:
             coerced = _coerce(field, value)
         except ValueError as exc:
@@ -440,6 +460,8 @@ def save(values: dict[str, Any], clear_secrets: list[str]) -> None:
     for name in clear_secrets:
         if FIELDS.get(name, {}).get("secret") is not True:
             errors.append(f"{name} is not a secret setting")
+        elif name in ENV_FIELDS:
+            errors.append(f"{name} is controlled by .env or the process environment; remove it there and restart")
     if errors:
         raise ValueError("; ".join(errors))
 
@@ -480,6 +502,7 @@ def snapshot() -> dict[str, Any]:
                 "label": field["label"],
                 "type": field["type"],
                 "secret": field["secret"],
+                "locked": name in ENV_FIELDS,
                 "choices": list(field["choices"] or []),
                 "hint": field.get("hint", ""),
                 "section": field.get("section", ""),

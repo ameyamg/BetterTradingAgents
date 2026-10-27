@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 os.environ.setdefault("OPENAI_AGENTS_DISABLE_TRACING", "1")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # P2.11: the LLM API key follows base_url to whatever host it names, so a
 # plain-http remote URL would hand the key to anyone on the path. Local
@@ -60,7 +60,7 @@ LLM_DEFAULT_MODEL = "gpt-6-luna"
 
 
 class Settings:
-    """Simple env-driven settings. No hierarchy, no layers."""
+    """File values override the process environment; saved settings are fallbacks."""
 
     # LLM (any OpenAI-compatible endpoint: OpenAI, OpenRouter, DeepSeek, Qwen, GLM, vLLM...)
     llm_base_url: str = _env("LLM_BASE_URL", LLM_DEFAULT_BASE_URL)

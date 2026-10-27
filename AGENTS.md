@@ -30,7 +30,7 @@ Python 3.12+, dependencies managed by `uv`. No frontend build step (vanilla HTML
 
 - Add behavior in the narrowest module that already owns it; match the surrounding style (typed, small functions, docstrings that explain *why*).
 - Every check is a standalone script that sets its own environment (`DB_PATH`, etc.) at import time — never import two checks into one process. New tests go in `scripts/check_<area>.py` and are picked up by `uv run test all`.
-- Settings resolve in layers: `app/config.py` (defaults) → `.env` (overrides) → in-app Settings (highest, applied live without restart). API keys are stored in the OS keychain, never in the DB or `.env`.
+- Settings priority per configured field: `.env` → process environment → in-app Settings/keychain → `app/config.py` defaults. Empty values allow saved fallbacks. File/environment fields are locked in Settings and need a restart after edits; other Settings apply live. Keys saved through Settings use the OS keychain (local DB fallback when unavailable).
 - **Secrets:** never read or edit `.env`; use `.env.example` for the variable list. Never commit keys.
 - **Paper trading only** — the Alpaca client is hardcoded to `paper=True`. Do not add live-trading paths.
 - The server binds to `127.0.0.1` and rejects non-loopback `Host`/`Origin` headers; keep those guards intact.
