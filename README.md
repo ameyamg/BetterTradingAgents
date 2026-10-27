@@ -162,30 +162,30 @@ confirmation. No paper account is required.
 uv run python -m app.backtest --tickers NVDA,AMD --start 2026-03-01 --end 2026-06-30
 ```
 
-**Mock results: holdout only, 60 decisions per depth.**
+**Backtest snapshot** (reproducible mock replay: 6 tickers, 2025-06 to
+2026-09, equal-weight accounting): the Fast profile compounded **+60.73%**
+vs a momentum baseline's **+19.46%** on identical dates and costs; holdout
+mean alpha **+3.45% per decision** (95% CI +0.7 to +6.6, the only tier
+whose interval excludes zero).
 
-| Depth | Cumulative | Mean alpha | Max drawdown |
-|---|---:|---:|---:|
-| Fast | -9.19% | -0.71% | 44.62% |
-| Pro | +45.04% | +0.37% | 46.94% |
-| Max | +94.87% | +1.80% | 24.50% |
+**Every depth adds context:** Fast = 3 agents (price + forecast) · Pro = 7
+(+ news, debate) · Max = 10 (+ sentiment, debate judge; in live replay the
+judge cut drawdown by about a third). Returns do not separate the tiers at
+honest sample sizes; full tables, intervals, and repro commands live in
+the [Backtesting wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting).
 
-**Real-LLM results: full grid, 138 decisions per depth (DeepSeek V4.1 Flash).**
-
-| Depth | Cumulative | Hit rate | Max drawdown |
-|---|---:|---:|---:|
-| Fast | +132.21% | 54.9% | 43.58% |
-| Pro | +55.94% | 53.5% | 40.63% |
-| Max | +82.29% | 53.8% | 29.57% |
-
-Both used six tickers over 2025-06-02 to 2026-09-14, with a 2026-02-15
-holdout. The tables cover different date slices. Returns compound simulated
-decision windows, not a funded portfolio; samples do not establish a winning
-depth, and historical LLM runs carry memorization risk.
+> [!NOTE]
+> When does Max return worse results? In our paired mock replay, Max cost
+> **-2.08% per matched decision** vs Fast (95% CI -3.91 to -0.63, excludes
+> zero); in live replay its mean alpha was lowest of the three tiers but
+> statistically indistinguishable. This tracks independent research: a
+> 20-year study across 100+ stocks found LLM investing strategies
+> [statistically underperform the market](https://arxiv.org/abs/2505.07078),
+> and a contamination-free benchmark found
+> [most agents don't beat buy-and-hold](https://arxiv.org/abs/2510.02209):
+> more agents buy context and risk control, not alpha.
 
 Reports and reproducibility manifests go to `backtests/`.
-See the [Backtesting wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki/Backtesting)
-for results, holdout comparisons, data limits, and reproducibility commands.
 
 ## Development
 

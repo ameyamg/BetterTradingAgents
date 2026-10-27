@@ -512,6 +512,69 @@ def _age_hours(as_of: str) -> float | None:
 _submit_lock = asyncio.Lock()
 
 
+def _describe_open_order(order) -> str:
+    """Plain-language description of a blocking order for rule messages."""
+    notional = getattr(order, "notional", None)
+    qty = getattr(order, "qty", None)
+    if notional not in (None, ""):
+        size = f"${float(notional):,.2f}"
+    elif qty not in (None, ""):
+        size = f"{qty} shares"
+    else:
+        size = "size n/a"
+    status = str(getattr(order.status, "value", order.status) or "").strip()
+    parts = [size]
+    if status:
+        parts.append(f"status {status}")
+    submitted = getattr(order, "submitted_at", None)
+    if submitted is not None:
+        try:
+            parts.append(
+                "placed " + submitted.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            )
+        except (AttributeError, ValueError):
+            pass
+    return ", ".join(parts)
+
+
+async def _raise_if_opposite_working(ticker: str, side: str) -> None:
+    """Wash-trade pre-check: Alpaca rejects any buy and sell working in the
+    same symbol at the same time ("potential wash trade detected. use complex
+    orders", seen first on ALAB 2026-10-26). That rule is the broker's, but
+    its message is not a remedy, so the app applies the same rule earlier and
+    names the blocking order and the two ways out. The live read is the
+    authority (local rows can be stale); on a read failure the check steps
+    aside and Alpaca's own rejection stays the backstop.
+    """
+    opposite = "sell" if side == "buy" else "buy"
+
+    def _fetch():
+        return _client().get_orders(
+            GetOrdersRequest(
+                status=QueryOrderStatus.OPEN,
+                symbols=[ticker],
+                side=OrderSide(opposite),
+                limit=100,
+            )
+        )
+
+    try:
+        working = await asyncio.to_thread(_fetch)
+    except Exception as exc:  # noqa: BLE001 - fail open; the broker still rejects
+        logger.warning("[broker] wash-trade pre-check unavailable for %s: %s", ticker, exc)
+        return
+    if not working:
+        return
+    raise BrokerRuleError(
+        f"an open {opposite} order for {ticker} is already working "
+        f"({_describe_open_order(working[0])}). Buy and sell orders working in the "
+        f"same symbol at the same time are rejected by Alpaca as a potential wash "
+        f"trade: cancel it on the Trades page or wait for it to fill, then retry "
+        f"this {side}.",
+        status_code=409,
+    )
+
+
 async def submit_order(run_id: str, ticker: str, side: str, qty: float) -> BrokerOrder:
     """Place one paper market/day order of `qty` shares for a run's decision.
 
@@ -614,6 +677,9 @@ async def submit_order(run_id: str, ticker: str, side: str, qty: float) -> Broke
                 f"({sellable:g} sellable right now)"
             )
         notional = round(qty * (analysis.price or held.current_price or 0.0), 2)
+
+    # Alpaca's wash-trade rule, applied earlier with a readable message.
+    await _raise_if_opposite_working(ticker, side)
 
     async with _submit_lock:
         if _has_active_order(run_id, ticker, side):

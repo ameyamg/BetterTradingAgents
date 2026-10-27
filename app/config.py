@@ -66,7 +66,10 @@ class Settings:
     llm_base_url: str = _env("LLM_BASE_URL", LLM_DEFAULT_BASE_URL)
     llm_api_key: str = _env("LLM_API_KEY")
     llm_model: str = _env("LLM_MODEL", LLM_DEFAULT_MODEL)
-    llm_temperature: float = float(_env("LLM_TEMPERATURE", "0.2"))
+    # 0.0 default since the phase-4 panel: identical runs flipped 6/20 decisions
+    # at 0.2 vs 2/20 at 0.0 (pooled 31% -> 14% over 29 pairs/arm) and 0.0 also
+    # costs ~4.6% less. Any explicit LLM_TEMPERATURE (env or .env) still wins.
+    llm_temperature: float = float(_env("LLM_TEMPERATURE", "0.0"))
     llm_timeout_seconds: float = float(_env("LLM_TIMEOUT_SECONDS", "90"))
     # P2.18 runaway bounds: max tokens forwarded to every provider (0 = let
     # the provider default stand) and smart retries per LLM call after
@@ -296,6 +299,22 @@ class Settings:
     # Set STREAM_REASONING=1 to enable; a provider that rejects streaming makes
     # the role's LLM fall back to non-streaming on first use.
     stream_reasoning: bool = _env("STREAM_REASONING", "0").lower() in ("1", "true", "yes")
+
+    # Prompt trim (release batch 2, item 8): cap the news/social payloads the
+    # researchers read (NOT what the UI shows; provenance keeps the full
+    # list). PROMPT_TRIM=0 restores the untrimmed payloads for A/B runs.
+    prompt_trim: bool = _env("PROMPT_TRIM", "1").lower() in ("1", "true", "yes")
+    news_prompt_items: int = max(1, int(_env("NEWS_PROMPT_ITEMS", "5")))
+    news_prompt_summary_chars: int = max(80, int(_env("NEWS_PROMPT_SUMMARY_CHARS", "240")))
+    news_prompt_content_chars: int = max(200, int(_env("NEWS_PROMPT_CONTENT_CHARS", "800")))
+    social_prompt_items: int = max(1, int(_env("SOCIAL_PROMPT_ITEMS", "8")))
+
+    # Live data TTL cache (release batch 2, item 9): news and history fetches
+    # are reused for this many seconds across analyses of the same ticker in
+    # one process, so a watchlist rerun does not re-pay every provider.
+    # 0 disables the cache (every analysis fetches fresh).
+    news_cache_ttl_seconds: int = max(0, int(_env("NEWS_CACHE_TTL_SECONDS", "900")))
+    history_cache_ttl_seconds: int = max(0, int(_env("HISTORY_CACHE_TTL_SECONDS", "300")))
 
     @property
     def llm_configured(self) -> bool:

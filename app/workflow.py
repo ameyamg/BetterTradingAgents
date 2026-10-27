@@ -750,6 +750,28 @@ async def fetch_past_decisions(ticker: str) -> dict | None:
         return None
 
 
+def _trim_news_items(items: list[dict]) -> list[dict]:
+    """Bound the news payload a researcher reads (release batch 2, item 8).
+
+    Caps the item count and truncates summary/content fields for the prompt
+    only; the UI provenance (source_references) still carries the fuller
+    list. PROMPT_TRIM=0 restores the untrimmed payload for A/B runs.
+    """
+    if not settings.prompt_trim:
+        return items
+    trimmed = []
+    for item in items[: settings.news_prompt_items]:
+        out = dict(item)
+        summary = out.get("summary")
+        if isinstance(summary, str) and len(summary) > settings.news_prompt_summary_chars:
+            out["summary"] = summary[: settings.news_prompt_summary_chars].rstrip() + "…"
+        content = out.get("content")
+        if isinstance(content, str) and len(content) > settings.news_prompt_content_chars:
+            out["content"] = content[: settings.news_prompt_content_chars].rstrip() + "…"
+        trimmed.append(out)
+    return trimmed
+
+
 def _portfolio_context(
     summary: PortfolioSummary | None, incognito: bool = False
 ) -> list[dict] | str:
@@ -1110,9 +1132,14 @@ async def analyze_ticker(
                 token_totals=token_totals,
                 role_usage=role_usage,
                 live=live_context,
-                payload={"items": market.news, "user_context": user_ctx},
+                payload={"items": _trim_news_items(market.news), "user_context": user_ctx},
             )
         if key == "sentiment":
+            social_items = (
+                market.social[: settings.social_prompt_items]
+                if settings.prompt_trim
+                else market.social
+            )
             return await _run_agent(
                 sentiment,
                 ticker,
@@ -1121,7 +1148,7 @@ async def analyze_ticker(
                 role_usage=role_usage,
                 live=live_context,
                 payload={
-                    "items": market.social,
+                    "items": social_items,
                     "crowd_proxy": market.crowd_proxy,
                     "user_context": user_ctx,
                 },
