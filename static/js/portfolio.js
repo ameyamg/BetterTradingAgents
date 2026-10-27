@@ -9,6 +9,7 @@ const esc = window.BTA_UI.escapeHtml;
 const showToast = window.BTA_UI.showToast;
 const fmt = (value) => (value == null ? "n/a" : `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const fmtUsd0 = (value) => (value == null ? "n/a" : `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+const fmtSh = (value) => (value == null ? "n/a" : Number(value).toLocaleString(undefined, { maximumFractionDigits: 6 }));
 
 // Filled, canceled, expired, rejected: no longer move, cannot be canceled.
 const PAPER_TERMINAL = new Set(["filled", "canceled", "expired", "rejected"]);
@@ -73,7 +74,7 @@ async function renderSyncState() {
     }
     if (sync.drift && sync.drift.length) {
       const parts = sync.drift.slice(0, 3).map((d) =>
-        `${esc(d.symbol || "order")} ${esc(d.side || "")}${d.notional != null ? ` $${Number(d.notional).toFixed(2)}` : ""}`);
+        `${esc(d.symbol || "order")} ${esc(d.side || "")}${d.qty != null ? ` ${fmtSh(d.qty)} sh` : d.notional != null ? ` $${Number(d.notional).toFixed(2)}` : ""}`);
       el.innerHTML = `Out of sync with the paper broker: ${sync.drift.length} open order(s) this app did not place (${parts.join(", ")}${sync.drift.length > 3 ? ", …" : ""}).`;
     } else {
       el.textContent = "Broker sync check failed; order state may be stale.";
@@ -216,6 +217,7 @@ function renderOrders(orders) {
       <td data-label="Placed">${esc(order.created_at || "")}</td>
       <td data-label="Ticker"><strong>${esc(order.ticker)}</strong></td>
       <td data-label="Side"><span class="side-chip ${esc(order.side)}">${esc(order.side)}</span></td>
+      <td class="num" data-label="Shares">${fmtSh(order.qty)}</td>
       <td class="num" data-label="Notional">${fmtUsd0(order.notional)}</td>
       <td data-label="Status">${statusChip(order.status)}${order.error ? `<small class="order-error">${esc(order.error)}</small>` : ""}</td>
       <td class="num" data-label="Filled avg price">${filled}</td>
@@ -466,7 +468,8 @@ function orderText(order) {
   if (order.status === "skipped" || order.status === "rejected" || order.status === "braked") {
     return `${order.side} ${order.ticker}: ${order.error || order.status}`;
   }
-  return `${order.side === "buy" ? "Bought" : "Sold"} ${order.ticker} ${fmtUsd0(order.notional)} (${order.status})`;
+  const shares = order.qty != null ? ` ${fmtSh(order.qty)} sh` : "";
+  return `${order.side === "buy" ? "Bought" : "Sold"} ${order.ticker}${shares} (${fmtUsd0(order.notional)}) (${order.status})`;
 }
 
 function renderAutomation(status) {

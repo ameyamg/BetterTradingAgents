@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import re
 import sqlite3
 import time
@@ -141,6 +142,12 @@ async def _call(fn):
 def _f(value) -> float | None:
     """Alpaca ships money fields as strings; empty stays None, never 0."""
     return None if value in (None, "") else float(value)
+
+
+def floor_qty(qty: float) -> float:
+    """Alpaca accepts at most 6 decimal places on share quantities; round
+    DOWN so a capped sell can never round itself back above the holding."""
+    return math.floor(qty * 1_000_000) / 1_000_000
 
 
 def _text(value) -> str:
@@ -278,6 +285,7 @@ async def positions() -> list[BrokerPosition]:
             BrokerPosition(
                 symbol=row.symbol,
                 quantity=float(row.qty),
+                available=_f(getattr(row, "qty_available", None)),
                 avg_entry_price=float(row.avg_entry_price),
                 current_price=_f(row.current_price),
                 market_value=_f(row.market_value),
@@ -305,6 +313,7 @@ async def init() -> None:
                     run_id TEXT NOT NULL,
                     ticker TEXT NOT NULL,
                     side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+                    qty REAL,
                     notional REAL NOT NULL,
                     order_type TEXT NOT NULL DEFAULT 'market',
                     time_in_force TEXT NOT NULL DEFAULT 'day',
@@ -324,6 +333,10 @@ async def init() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_broker_orders_created "
                 "ON broker_orders(created_at)"
             )
+            try:
+                connection.execute("ALTER TABLE broker_orders ADD COLUMN qty REAL")
+            except sqlite3.OperationalError:
+                pass  # pre-qty table: the column is already there
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS broker_sync (
@@ -373,6 +386,7 @@ def _row_to_order(row: sqlite3.Row) -> BrokerOrder:
         run_id=row["run_id"],
         ticker=row["ticker"],
         side=row["side"],
+        qty=row["qty"],
         notional=row["notional"],
         status=row["status"],
         decision=row["decision"],
@@ -418,6 +432,7 @@ def _insert_order(
     run_id: str,
     ticker: str,
     side: str,
+    qty: float,
     notional: float,
     decision: str,
     confidence: float,
@@ -427,15 +442,16 @@ def _insert_order(
         connection.execute(
             """
             INSERT INTO broker_orders (
-                client_order_id, run_id, ticker, side, notional,
+                client_order_id, run_id, ticker, side, qty, notional,
                 status, decision, confidence, decision_as_of
-            ) VALUES (?, ?, ?, ?, ?, 'pending_submit', ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, 'pending_submit', ?, ?, ?)
             """,
             (
                 client_order_id,
                 run_id,
                 ticker,
                 side,
+                qty,
                 notional,
                 decision,
                 confidence,
@@ -496,13 +512,15 @@ def _age_hours(as_of: str) -> float | None:
 _submit_lock = asyncio.Lock()
 
 
-async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> BrokerOrder:
-    """Place one paper market/day notional order for a run's decision.
+async def submit_order(run_id: str, ticker: str, side: str, qty: float) -> BrokerOrder:
+    """Place one paper market/day order of `qty` shares for a run's decision.
 
     Every guard runs before any HTTP call. The row is inserted with status
     pending_submit before the POST, so a timeout can only leave state
     'unknown', which refresh_order resolves by client_order_id - never a
-    blind second submission.
+    blind second submission. Orders are share-based: a dollar notional gets
+    converted to shares by the broker at its own price, which let a price
+    tick turn a full exit into an over-sell (the rejected CMBT order).
     """
     from app import run_history
 
@@ -519,14 +537,13 @@ async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> 
             "paper order submissions are disabled (ALPACA_TRADING_ENABLED)",
             status_code=403,
         )
-    if notional <= 0:
-        raise BrokerRuleError("notional must be positive")
-    if notional > settings.alpaca_max_order_usd:
-        raise BrokerRuleError(
-            f"notional must not exceed {settings.alpaca_max_order_usd:,.0f} USD"
-        )
-    # Alpaca accepts at most 2 decimal places on notional (42210000).
-    notional = round(notional, 2)
+    if qty <= 0:
+        raise BrokerRuleError("share quantity must be positive")
+    if qty > 1_000_000:
+        raise BrokerRuleError("share quantity must not exceed 1,000,000")
+    qty = floor_qty(qty)
+    if qty <= 0:
+        raise BrokerRuleError("share quantity is below one millionth of a share")
 
     run = await run_history.get(run_id)
     if run is None:
@@ -546,13 +563,30 @@ async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> 
         raise BrokerRuleError(
             f"the decision for {ticker} is {analysis.decision}, not a {side}"
         )
-    if side == "buy" and notional < 1:
-        raise BrokerRuleError("buy notional must be at least 1 USD")
     age = _age_hours(analysis.as_of)
     if age is None or age > settings.alpaca_max_decision_age_hours:
         raise BrokerRuleError(
             "research too old to trade: reanalyze before ordering", status_code=409
         )
+
+    notional = 0.0
+    if side == "buy":
+        ref_price = analysis.price
+        if ref_price is None or ref_price <= 0:
+            raise BrokerRuleError(
+                "the decision has no reference price; reanalyze before ordering",
+                status_code=409,
+            )
+        if qty * ref_price > settings.alpaca_max_order_usd:
+            raise BrokerRuleError(
+                f"{qty:g} shares at ${ref_price:,.2f} must not exceed "
+                f"{settings.alpaca_max_order_usd:,.0f} USD"
+            )
+        if qty * ref_price < 1:
+            raise BrokerRuleError(
+                "buy order must be worth at least 1 USD at the reference price"
+            )
+        notional = round(qty * ref_price, 2)
 
     snapshot = await account()
     if snapshot.status != "ACTIVE" or snapshot.trading_blocked:
@@ -568,18 +602,18 @@ async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> 
             raise BrokerRuleError(
                 f"no paper position in {ticker} to sell; shorting is out of scope"
             )
-        market_value = held.market_value or 0.0
-        if market_value <= 0:
-            raise BrokerRuleError(f"the {ticker} position has no value to sell")
-        # A price tick between the position read and the POST can make an
-        # exact-value sell overshoot the holding (Alpaca 40310000), so every
-        # sell is haircut slightly: it can never short, but may leave dust.
-        # ponytail: fixed 0.5% haircut; per-tick precision if dust ever matters.
-        notional = round(min(notional, market_value * 0.995), 2)
-        if notional < 0.01:
+        # Hard limit: a sell can never exceed the shares actually owned.
+        # qty_available excludes shares locked in open orders; fall back to
+        # the full position when the broker does not break it out.
+        sellable = held.available if held.available is not None else held.quantity
+        qty = min(qty, floor_qty(sellable))
+        if qty <= 0:
             raise BrokerRuleError(
-                f"the {ticker} position is worth less than a cent at the live price"
+                f"cannot sell {ticker}: the request exceeds the "
+                f"{held.quantity:g} shares held "
+                f"({sellable:g} sellable right now)"
             )
+        notional = round(qty * (analysis.price or held.current_price or 0.0), 2)
 
     async with _submit_lock:
         if _has_active_order(run_id, ticker, side):
@@ -600,25 +634,26 @@ async def submit_order(run_id: str, ticker: str, side: str, notional: float) -> 
             run_id,
             ticker,
             side,
+            qty,
             notional,
             analysis.decision,
             analysis.confidence,
             analysis.as_of,
         )
-    return await _submit_market_order(client_order_id, ticker, side, notional)
+    return await _submit_market_order(client_order_id, ticker, side, qty)
 
 
 async def _submit_market_order(
-    client_order_id: str, ticker: str, side: str, notional: float
+    client_order_id: str, ticker: str, side: str, qty: float
 ) -> BrokerOrder:
-    """POST one market/day notional order and settle the local row from the
-    response. The caller must have inserted the row before this runs."""
+    """POST one market/day order of `qty` shares and settle the local row from
+    the response. The caller must have inserted the row before this runs."""
 
     def _submit():
         return _client().submit_order(
             MarketOrderRequest(
                 symbol=ticker,
-                notional=notional,
+                qty=qty,
                 side=OrderSide(side),
                 type=OrderType.MARKET,
                 time_in_force=TimeInForce.DAY,
@@ -797,6 +832,7 @@ async def order_performance(limit: int = 50) -> list[dict]:
                 "run_id": row["run_id"],
                 "ticker": row["ticker"],
                 "side": row["side"],
+                "qty": row["qty"],
                 "notional": row["notional"],
                 "filled_qty": row["filled_qty"],
                 "filled_avg_price": entry,
@@ -970,6 +1006,7 @@ async def sync_once() -> dict:
                 "client_order_id": client_order_id,
                 "symbol": str(getattr(order, "symbol", "") or ""),
                 "side": _text(getattr(order, "side", "")),
+                "qty": _f(getattr(order, "qty", None)),
                 "notional": _f(getattr(order, "notional", None)),
                 "submitted_at": str(getattr(order, "submitted_at", "") or ""),
             }

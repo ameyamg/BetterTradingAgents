@@ -86,6 +86,7 @@ FIELD_GROUPS: list[dict[str, Any]] = [
             _field("llm_timeout_seconds", "LLM_TIMEOUT_SECONDS", "Timeout (seconds)", "float", lo=5, hi=600, hint="Per-request cap", example="90"),
             _field("llm_max_tokens", "MAX_TOKENS", "Max tokens", "int", lo=0, hi=1000000, hint="Caps a runaway response; 0 = provider default", example="4000"),
             _field("llm_max_retries", "LLM_MAX_RETRIES", "Retries", "int", lo=0, hi=10, hint="Waits and retries rate limits, server errors, malformed output; 0 = fail fast", example="2"),
+            _field("llm_concurrency", "LLM_CONCURRENCY", "Max parallel LLM calls", "int", lo=0, hi=64, hint="Caps in-flight agent calls app-wide so bursts stay under shared-endpoint limits (e.g. Modal's 16 per workspace); 0 = unlimited", example="12"),
             _field("llm_reasoning_effort", "LLM_REASONING_EFFORT", "Reasoning effort", hint="Provider-specific: none, low, medium, high (GLM uses none/low)", example="none"),
             _field("llm_price_in", "LLM_PRICE_IN", "Price in ($/1M tokens)", "float", lo=0, hi=10000, hint="0 = use the built-in list-price table", example="1.5"),
             _field("llm_price_out", "LLM_PRICE_OUT", "Price out ($/1M tokens)", "float", lo=0, hi=10000, hint="0 = use the built-in list-price table", example="6"),

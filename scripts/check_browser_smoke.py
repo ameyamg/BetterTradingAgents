@@ -484,11 +484,11 @@ def check_paper_portfolio(page) -> None:
     orders = [
         BrokerOrder(
             client_order_id="bta-smoke-open0001", run_id=run_id, ticker=TICKER,
-            side="buy", notional=5000.0, status="accepted",
+            side="buy", qty=50.0, notional=5000.0, status="accepted",
         ),
         BrokerOrder(
             client_order_id="bta-smoke-filled01", run_id=run_id, ticker=TICKER,
-            side="buy", notional=5000.0, status="filled",
+            side="buy", qty=50.0, notional=5000.0, status="filled",
             filled_qty=12.0, filled_avg_price=95.0,
         ),
     ]
@@ -522,10 +522,10 @@ def check_paper_portfolio(page) -> None:
                 return orders[index]
         raise broker_module.BrokerRuleError("no order", status_code=404)
 
-    async def fake_submit_order(run_id_arg, ticker, side, notional):
+    async def fake_submit_order(run_id_arg, ticker, side, qty):
         return BrokerOrder(
             client_order_id="bta-smoke-submit01", run_id=run_id_arg, ticker=ticker,
-            side=side, notional=notional, status="accepted",
+            side=side, qty=qty, notional=round(float(qty) * 100.0, 2), status="accepted",
         )
 
     fakes = {
@@ -576,6 +576,11 @@ def check_paper_portfolio(page) -> None:
         page.wait_for_selector(".paper-open-btn", timeout=10_000)
         page.click(".paper-open-btn")
         page.wait_for_selector(f"#paper-review-{TICKER}:not(.hidden)", timeout=10_000)
+        # The review must ground the order: the six-month chart and the live
+        # price load next to the decision-time reference price.
+        page.wait_for_selector(f"#paper-chart-{TICKER} svg", timeout=10_000)
+        assert page.inner_text(f"#paper-live-{TICKER}").startswith("$"), \
+            "the live price must load from the price history"
         assert page.is_disabled(f"#paper-place-{TICKER}"), \
             "place must stay disabled until the review checkbox is checked"
         page.check(f"#paper-confirm-{TICKER}")
@@ -664,7 +669,7 @@ def check_paper_portfolio(page) -> None:
     try:
         # A filled order row so the performance card has data (no replay anymore).
         broker_module._insert_order(
-            "bta-smoke-seed01", run_id, TICKER, "buy", 5000.0, "BUY", 0.6,
+            "bta-smoke-seed01", run_id, TICKER, "buy", 50.0, 5000.0, "BUY", 0.6,
             datetime.now(timezone.utc).isoformat(),
         )
         broker_module._update_from_remote_order(

@@ -633,22 +633,38 @@ async def _act_on_decision(
                         f"{settings.automation_cash_floor_pct:.0%} of equity"
                     ),
                 )
+        # Shares, not dollars: the budget stays a USD estimate, but the order
+        # itself is a share count fixed at the decision's reference price.
+        if not analysis.price or analysis.price <= 0:
+            return AutomationOrderOutcome(
+                ticker=ticker, side="buy", notional=notional, status="skipped",
+                error="decision has no reference price to size shares from",
+            )
+        qty = broker.floor_qty(notional / analysis.price)
     elif analysis.decision == "SELL" and settings.automation_allow_sells:
         position = held_map.get(ticker)
         if position is None:
             return None  # the broker would reject a short; nothing to exit
-        notional = position.market_value
-        if notional is None or notional <= 0:
+        # Full exit in shares: selling the USD value lets the broker's own
+        # price conversion overshoot the holding (the CMBT rejection).
+        sellable = (
+            position.available
+            if position.available is not None
+            else position.quantity
+        )
+        qty = broker.floor_qty(sellable)
+        if qty <= 0:
             return AutomationOrderOutcome(
                 ticker=ticker, side="sell", status="skipped",
-                error="held position has no market value to sell",
+                error="no sellable shares in the held position",
             )
+        notional = round(qty * (analysis.price or position.current_price or 0.0), 2)
         side = "sell"
     else:
         return None
 
     try:
-        order = await broker.submit_order(run_id, ticker, side, notional)
+        order = await broker.submit_order(run_id, ticker, side, qty)
     except Exception as exc:  # noqa: BLE001 - one rejected order must not kill the session
         logger.warning("[automation] %s %s rejected: %s", side, ticker, exc)
         return AutomationOrderOutcome(
@@ -656,7 +672,8 @@ async def _act_on_decision(
             error=str(exc)[:300],
         )
     logger.info(
-        "[automation] %s %s $%.2f -> %s", side, ticker, notional, order.status
+        "[automation] %s %s %g sh (~$%.2f) -> %s",
+        side, ticker, qty, notional, order.status,
     )
     return AutomationOrderOutcome(
         ticker=ticker,

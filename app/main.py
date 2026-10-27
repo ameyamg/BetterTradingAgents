@@ -602,7 +602,7 @@ async def place_broker_order(request: BrokerOrderRequest):
         )
     try:
         return await broker.submit_order(
-            request.run_id, ticker, request.side, request.notional
+            request.run_id, ticker, request.side, request.qty
         )
     except (broker.BrokerNotConfigured, broker.BrokerRuleError) as exc:
         raise _broker_http_error(exc) from exc

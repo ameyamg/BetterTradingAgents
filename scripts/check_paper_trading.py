@@ -281,10 +281,10 @@ async def checks() -> None:
     _use(fake)
 
     # ---- guard rails reject before any HTTP call -----------------------------
-    async def _rejects(run_id, ticker, side, notional, status_code, phrase):
+    async def _rejects(run_id, ticker, side, qty, status_code, phrase):
         submits_before = fake.submit_calls
         try:
-            await broker.submit_order(run_id, ticker, side, notional)
+            await broker.submit_order(run_id, ticker, side, qty)
             raise AssertionError(f"{run_id} {side} must be rejected")
         except broker.BrokerRuleError as exc:
             assert exc.status_code == status_code, (exc.status_code, exc)
@@ -296,7 +296,7 @@ async def checks() -> None:
     await _rejects("paperrun06", "TSLA", "buy", 100, 409, "research too old")
     await _rejects("paperrun01", "AAPL", "buy", 20000, 400, "must not exceed")
     await _rejects("paperrun01", "AAPL", "sell", 100, 400, "not a sell")
-    await _rejects("paperrun01", "AAPL", "buy", 0.5, 400, "at least 1 USD")
+    await _rejects("paperrun01", "AAPL", "buy", 0.001, 400, "at least 1 USD")
     print("guard rails OK (HOLD, no position, stale, caps, side mismatch)")
 
 
@@ -306,7 +306,7 @@ async def checks() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         blocked = await client.post(
             "/api/broker/orders",
-            json={"run_id": "paperrun01", "ticker": "AAPL", "side": "buy", "notional": 100, "confirm": True},
+            json={"run_id": "paperrun01", "ticker": "AAPL", "side": "buy", "qty": 100, "confirm": True},
         )
         assert blocked.status_code == 403, blocked.text
         assert "disabled" in blocked.json()["detail"]
@@ -314,12 +314,12 @@ async def checks() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         unconfirmed = await client.post(
             "/api/broker/orders",
-            json={"run_id": "paperrun01", "ticker": "AAPL", "side": "buy", "notional": 100, "confirm": False},
+            json={"run_id": "paperrun01", "ticker": "AAPL", "side": "buy", "qty": 100, "confirm": False},
         )
         assert unconfirmed.status_code == 400 and "confirm" in unconfirmed.json()["detail"]
         bad_ticker = await client.post(
             "/api/broker/orders",
-            json={"run_id": "paperrun01", "ticker": "!!", "side": "buy", "notional": 100, "confirm": True},
+            json={"run_id": "paperrun01", "ticker": "!!", "side": "buy", "qty": 100, "confirm": True},
         )
         assert bad_ticker.status_code == 400
     print("kill switch + confirm + ticker validation OK")
@@ -330,18 +330,19 @@ async def checks() -> None:
         assert row is not None and row["status"] == "pending_submit"
 
     fake.on_submit = _assert_pending
-    placed = await broker.submit_order("paperrun01", "aapl", "buy", 5000.0)
+    placed = await broker.submit_order("paperrun01", "aapl", "buy", 20.0)
     assert fake.submit_calls == 1
     assert placed.status == "accepted" and placed.alpaca_order_id
     assert placed.decision == "BUY" and placed.run_id == "paperrun01"
     row = broker._get_order_row(placed.client_order_id)
-    assert row["status"] == "accepted" and row["notional"] == 5000.0
+    assert row["status"] == "accepted" and row["qty"] == 20.0
+    assert row["notional"] == 3800.0  # 20 shares x the $190 reference price
     assert row["decision_as_of"] == recent
     print("happy submit + insert-before-POST OK:", placed.client_order_id[:12])
 
     # ---- duplicate while non-terminal -> 409 ---------------------------------
     try:
-        await broker.submit_order("paperrun01", "AAPL", "buy", 5000.0)
+        await broker.submit_order("paperrun01", "AAPL", "buy", 20.0)
         raise AssertionError("duplicate must be rejected")
     except broker.BrokerRuleError as exc:
         assert exc.status_code == 409
@@ -350,7 +351,7 @@ async def checks() -> None:
 
     # ---- timeout: state unknown, reconcile-by-client-id, no second POST ------
     fake.submit_error = requests.exceptions.ConnectionError("connection lost")
-    lost = await broker.submit_order("paperrun02", "NVDA", "buy", 2500.0)
+    lost = await broker.submit_order("paperrun02", "NVDA", "buy", 10.0)
     assert lost.status == "unknown" and "unknown" in (lost.error or "")
     assert fake.submit_calls == 2  # AAPL + NVDA, never a retry POST
     fake.submit_error = None
@@ -379,7 +380,7 @@ async def checks() -> None:
 
     # ---- daily cap ------------------------------------------------------------
     settings.alpaca_max_orders_per_day = 1
-    await _rejects("paperrun03", "AMD", "buy", 100, 429, "daily paper order cap")
+    await _rejects("paperrun03", "AMD", "buy", 10, 429, "daily paper order cap")
     settings.alpaca_max_orders_per_day = 20
     print("daily cap OK")
 
@@ -388,7 +389,7 @@ async def checks() -> None:
     fake.submit_error = _api_error(422, 42210000, "market closed")
     submits_before = fake.submit_calls
     try:
-        await broker.submit_order("paperrun03", "AMD", "buy", 100)
+        await broker.submit_order("paperrun03", "AMD", "buy", 10)
         raise AssertionError("a 422 from Alpaca must not pass as an order")
     except broker.BrokerRuleError as exc:
         assert exc.status_code == 502 and "market closed" in str(exc)
@@ -403,28 +404,44 @@ async def checks() -> None:
     fake.on_submit = None
 
     # ---- live-discovered edge cases (2026-09-29) -----------------------------
-    # Alpaca accepts at most 2 decimals on notional; buys are rounded.
+    # Alpaca accepts at most 6 decimals on share qty; requests are floored.
     captured = {}
-    fake.on_submit = lambda order_data: captured.update(notional=order_data.notional)
-    rounded = await broker.submit_order("paperrun01", "aapl", "buy", 5000.567)
-    assert captured["notional"] == 5000.57, captured["notional"]
-    assert rounded.notional == 5000.57
-    print("buy notional rounded to 2dp OK")
+    fake.on_submit = lambda order_data: captured.update(qty=order_data.qty)
+    rounded = await broker.submit_order("paperrun01", "aapl", "buy", 20.1234567)
+    assert captured["qty"] == 20.123456, captured["qty"]
+    assert rounded.qty == 20.123456
+    print("buy qty floored to 6dp OK")
 
-    # A dust position (worth < $1) must still be closable: the sell floor is
-    # the position value after the anti-overshoot haircut, not $1.
+    # A dust position (well under one share) stays closable: the sell cap is
+    # the share count held, not a USD floor.
     dust = SimpleNamespace(
-        symbol="AAPL", qty="0.0013", avg_entry_price="764.72",
+        symbol="AAPL", qty="0.0013", qty_available="0.0013", avg_entry_price="764.72",
         current_price="769.0", market_value="0.5",
         unrealized_pl="0.003", unrealized_plpc="0.003",
     )
     fake.positions = [dust]
     dust_order = await broker.submit_order("paperrun05", "AAPL", "sell", 100)
-    assert captured["notional"] == 0.5, captured["notional"]  # min(100, 0.4975) rounded
+    assert captured["qty"] == 0.0013, captured["qty"]  # capped to the shares held
     assert dust_order.status == "accepted"
     fake.positions = []
+    print("dust-position sell OK")
+
+    # A sell may never exceed the shares owned (live-reported 2026-10-27: a
+    # $2505 notional sell converted by Alpaca into 142.98 shares against a
+    # 136.46-share holding and was rejected).
+    broker._update_order(dust_order.client_order_id, status="canceled")
+    held = SimpleNamespace(
+        symbol="AAPL", qty="12", qty_available="12", avg_entry_price="95",
+        current_price="100", market_value="1200",
+        unrealized_pl="60", unrealized_plpc="0.05",
+    )
+    fake.positions = [held]
+    capped_sell = await broker.submit_order("paperrun05", "AAPL", "sell", 500)
+    assert captured["qty"] == 12, captured["qty"]  # clamped to the holding
+    assert capped_sell.status == "accepted"
+    fake.positions = []
     fake.on_submit = None
-    print("dust-position sell below $1 OK")
+    print("sell clamped to owned shares OK")
 
     # ================= M3: orders list with reconcile-on-read =================
     # Rows are newest first; a non-terminal row reconciles from the remote
@@ -433,7 +450,7 @@ async def checks() -> None:
         id=uuid4(), status=OrderStatus.FILLED, filled_qty="7", filled_avg_price="191.00",
     )
     fake.submit_error = None
-    await broker.submit_order("paperrun03", "AMD", "buy", 900.0)  # local row: accepted
+    await broker.submit_order("paperrun03", "AMD", "buy", 5.0)  # local row: accepted
     fake.remote_order = None
     fake.error = _api_error(503, 50310000, "temporarily down")
     orders = await broker.list_orders(limit=10)
@@ -458,7 +475,7 @@ async def checks() -> None:
 
             placed = await client.post(
                 "/api/broker/orders",
-                json={"run_id": "paperrun03", "ticker": "AMD", "side": "buy", "notional": 700, "confirm": True},
+                json={"run_id": "paperrun03", "ticker": "AMD", "side": "buy", "qty": 5, "confirm": True},
             )
             assert placed.status_code == 200, placed.text
             fresh = placed.json()

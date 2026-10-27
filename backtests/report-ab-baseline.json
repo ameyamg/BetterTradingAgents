@@ -1,0 +1,208 @@
+{
+  "generated_at": "2026-10-26T09:16:54.008971+00:00",
+  "config": {
+    "mode": "llm",
+    "name": "ab-baseline",
+    "model": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "tickers": [
+      "NVDA",
+      "AMD"
+    ],
+    "start": "2026-08-03",
+    "end": "2026-09-14",
+    "step_days": 21,
+    "horizon_days": 21,
+    "depth": "pro",
+    "outlook": "short_term",
+    "cost_pct": 0.1,
+    "short": false,
+    "fundamentals": "excluded",
+    "holdout": null,
+    "seed": 7,
+    "excluded_analysts": [
+      "market"
+    ],
+    "policy_version": "2026-10-e",
+    "debate_rounds": 2
+  },
+  "flags": {
+    "memorization_risk": "high",
+    "memorization_note": "LLM-mode backtests on dates inside the model's training data are inflated: the model may already know how each window resolved. Prefer mock mode or very recent dates for headline numbers.",
+    "fundamentals_vintage": "excluded",
+    "fundamentals_bias": "fundamentals excluded from replay: opt in to the point-in-time SEC EDGAR source with --sec-edgar-fundamentals",
+    "news_rule": "news items filtered to published <= decision date"
+  },
+  "overall": {
+    "decisions": 6,
+    "counts": {
+      "BUY": 0,
+      "SELL": 5,
+      "HOLD": 1
+    },
+    "hit_rate_pct": null,
+    "avg_net_pct": 0.0,
+    "avg_alpha_pct": null,
+    "cumulative_pct": 0.0,
+    "sharpe": 0.0,
+    "max_drawdown_pct": 0.0,
+    "periods_per_year": 17.4,
+    "spy_cumulative_pct": 2.52,
+    "llm_usage": {
+      "prompt_tokens": 42060,
+      "completion_tokens": 14091,
+      "total_tokens": 56151,
+      "cost_usd": 0.0295,
+      "priced_runs": 6
+    },
+    "baselines": {
+      "all_hold": {
+        "decisions": 6,
+        "cumulative_pct": 0.0,
+        "note": "every decision HOLD scores 0 net after costs"
+      },
+      "momentum": {
+        "decisions": 6,
+        "counts": {
+          "BUY": 5,
+          "SELL": 0,
+          "HOLD": 1
+        },
+        "hit_rate_pct": 80.0,
+        "avg_net_pct": 5.33,
+        "avg_alpha_pct": 5.81,
+        "cumulative_pct": 32.61,
+        "sharpe": 2.05,
+        "max_drawdown_pct": 5.85,
+        "periods_per_year": 17.4,
+        "positioned_n": 5,
+        "alpha_ci_pct": [
+          -2.33,
+          17.17
+        ],
+        "verdict": "insufficient sample (n=5 < 30): do not promote"
+      }
+    },
+    "periods": null
+  },
+  "tickers": {
+    "NVDA": {
+      "decisions": 3,
+      "counts": {
+        "BUY": 0,
+        "SELL": 2,
+        "HOLD": 1
+      },
+      "hit_rate_pct": null,
+      "avg_net_pct": 0.0,
+      "avg_alpha_pct": null,
+      "cumulative_pct": 0.0,
+      "sharpe": 0.0,
+      "max_drawdown_pct": 0.0,
+      "periods_per_year": 17.4,
+      "buy_hold_pct": 15.74
+    },
+    "AMD": {
+      "decisions": 3,
+      "counts": {
+        "BUY": 0,
+        "SELL": 3,
+        "HOLD": 0
+      },
+      "hit_rate_pct": null,
+      "avg_net_pct": 0.0,
+      "avg_alpha_pct": null,
+      "cumulative_pct": 0.0,
+      "sharpe": 0.0,
+      "max_drawdown_pct": 0.0,
+      "periods_per_year": 17.4,
+      "buy_hold_pct": 30.35
+    }
+  },
+  "outcomes": [
+    {
+      "ticker": "AMD",
+      "date": "2026-08-03",
+      "decision": "SELL",
+      "confidence": 0.62,
+      "entry": 484.64,
+      "exit": 456.75,
+      "window_days": 21,
+      "gross_pct": -5.75,
+      "net_pct": 0.0,
+      "spy_pct": 0.77,
+      "alpha_pct": null,
+      "note": "long-only mode: SELL scores 0"
+    },
+    {
+      "ticker": "NVDA",
+      "date": "2026-08-03",
+      "decision": "HOLD",
+      "confidence": 0.55,
+      "entry": 206.409,
+      "exit": 208.247,
+      "window_days": 21,
+      "gross_pct": 0.89,
+      "net_pct": 0.0,
+      "spy_pct": 0.77,
+      "alpha_pct": null,
+      "note": "HOLD scores 0"
+    },
+    {
+      "ticker": "AMD",
+      "date": "2026-08-24",
+      "decision": "SELL",
+      "confidence": 0.7,
+      "entry": 456.75,
+      "exit": 493.41,
+      "window_days": 21,
+      "gross_pct": 8.03,
+      "net_pct": 0.0,
+      "spy_pct": -0.34,
+      "alpha_pct": null,
+      "note": "long-only mode: SELL scores 0"
+    },
+    {
+      "ticker": "NVDA",
+      "date": "2026-08-24",
+      "decision": "SELL",
+      "confidence": 0.62,
+      "entry": 208.247,
+      "exit": 210.96,
+      "window_days": 21,
+      "gross_pct": 1.3,
+      "net_pct": 0.0,
+      "spy_pct": -0.34,
+      "alpha_pct": null,
+      "note": "long-only mode: SELL scores 0"
+    },
+    {
+      "ticker": "AMD",
+      "date": "2026-09-14",
+      "decision": "SELL",
+      "confidence": 0.6,
+      "entry": 493.41,
+      "exit": 631.75,
+      "window_days": 21,
+      "gross_pct": 28.04,
+      "net_pct": 0.0,
+      "spy_pct": 2.09,
+      "alpha_pct": null,
+      "note": "long-only mode: SELL scores 0"
+    },
+    {
+      "ticker": "NVDA",
+      "date": "2026-09-14",
+      "decision": "SELL",
+      "confidence": 0.62,
+      "entry": 210.96,
+      "exit": 238.9,
+      "window_days": 21,
+      "gross_pct": 13.24,
+      "net_pct": 0.0,
+      "spy_pct": 2.09,
+      "alpha_pct": null,
+      "note": "long-only mode: SELL scores 0"
+    }
+  ],
+  "ungraded": []
+}
