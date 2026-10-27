@@ -103,7 +103,10 @@ Screen-by-screen walkthrough with screenshots: wiki [Usage](https://github.com/k
 
 ## Configuration
 
-Everything is editable in the app (Settings page); `.env` is the default layer. Key
+Configuration priority per configured field is `.env` → process environment →
+saved Settings (OS keychain for keys) → defaults. Empty values allow saved fallbacks.
+Fields set in `.env` or the environment are locked in Settings; edit them at their
+source and restart, or remove/comment them to use Settings. Other changes apply live. Key
 sign-up links and what is optional: wiki [Providers](https://github.com/kingabzpro/BetterTradingAgents/wiki/Providers).
 
 | Variable | Default | Purpose |

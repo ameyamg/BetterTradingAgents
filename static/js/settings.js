@@ -19,7 +19,7 @@ let activeTab = localStorage.getItem("bta_settings_tab") || "";
 const SOURCE_TEXT = {
   keychain: "OS keychain",
   db: "local DB, unencrypted",
-  env: "from .env",
+  env: "from .env / environment",
   "not set": "not set",
 };
 
@@ -116,17 +116,18 @@ function inputId(name) {
 
 function fieldInput(field) {
   const id = inputId(field.name);
+  const disabled = field.locked ? " disabled" : "";
   if (field.type === "bool") {
-    return `<input type="checkbox" id="${id}" data-name="${esc(field.name)}"${field.value ? " checked" : ""} aria-label="${esc(field.label)}">`;
+    return `<input type="checkbox" id="${id}"${disabled} data-name="${esc(field.name)}"${field.value ? " checked" : ""} aria-label="${esc(field.label)}">`;
   }
   if (field.choices.length) {
     const options = field.choices
       .map((choice) => `<option value="${esc(choice)}"${choice === field.value ? " selected" : ""}>${esc(choice)}</option>`)
       .join("");
-    return `<select id="${id}" data-name="${esc(field.name)}">${options}</select>`;
+    return `<select id="${id}"${disabled} data-name="${esc(field.name)}">${options}</select>`;
   }
   if (field.secret) {
-    return `<input type="password" id="${id}" data-name="${esc(field.name)}" autocomplete="off" ` +
+    return `<input type="password" id="${id}"${disabled} data-name="${esc(field.name)}" autocomplete="off" ` +
       `placeholder="${field.configured ? "unchanged" : "not set"}" aria-label="${esc(field.label)}">` +
       `<button type="button" class="reveal-btn" data-reveal="${esc(field.name)}" aria-label="Show or hide ${esc(field.label)}">Show</button>`;
   }
@@ -135,7 +136,7 @@ function fieldInput(field) {
   const step = field.type === "float" ? "any" : "1";
   const list = field.name === "llm_reasoning_effort" ? ` list="dl-reasoning"` : "";
   const placeholder = field.example ? ` placeholder="${esc(field.example)}"` : "";
-  return `<input type="${type}" step="${step}"${list}${placeholder} id="${id}" data-name="${esc(field.name)}"${changedClass} ` +
+  return `<input type="${type}" step="${step}"${list}${placeholder} id="${id}"${disabled} data-name="${esc(field.name)}"${changedClass} ` +
     `value="${esc(field.value == null ? "" : field.value)}" aria-label="${esc(field.label)}">`;
 }
 
@@ -146,13 +147,16 @@ function fieldRow(field) {
     const chipClass = field.source === "db" ? "db" : field.source === "keychain" ? "keychain" : "env";
     extra =
       `<span class="source-chip ${chipClass}" data-source="${esc(field.name)}">${SOURCE_TEXT[field.source] || field.source}</span>` +
-      (field.configured
+      (field.configured && !field.locked
         ? `<label class="clear-secret"><input type="checkbox" data-clear="${esc(field.name)}">clear</label>`
         : "");
+  } else if (field.locked) {
+    extra = `<span class="source-chip env">${SOURCE_TEXT.env}</span>`;
   } else if (String(originals[field.name]) !== String(field.default)) {
     extra = `<span class="source-chip env">changed</span>`;
   }
-  const hint = field.hint ? `<span class="field-hint">${esc(field.hint)}</span>` : "";
+  const hintText = field.locked ? `${field.hint || ""} Edit ${field.env} in .env or the environment and restart to change this value.` : field.hint;
+  const hint = hintText ? `<span class="field-hint">${esc(hintText)}</span>` : "";
   /* The env var moves into the tooltip; the visible line shows a concrete
      example value so users know what the field expects. */
   const codeLine = field.example
@@ -318,7 +322,7 @@ function collectChanges() {
   for (const group of spec.groups) {
     for (const field of group.fields) {
       const input = $(inputId(field.name));
-      if (!input) continue;
+      if (!input || field.locked) continue;
       if (field.secret) {
         if (input.value.trim() !== "") {
           values[field.name] = input.value.trim();

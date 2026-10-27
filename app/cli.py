@@ -138,7 +138,8 @@ def test() -> int:
         )
     else:
         names = requested or list(FAST_CHECKS)
-    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}
+    # Developer .env values must never override a check's scratch DB or keys.
+    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT), "PYTHON_DOTENV_DISABLED": "1"}
     failed: list[str] = []
     for name in names:
         script = _check_path(name)
