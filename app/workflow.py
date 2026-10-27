@@ -385,8 +385,8 @@ async def _kick_streamed(
     agent, task, ticker: str, agent_name: str, emit: Emit,
 ) -> tuple[dict, dict]:
     """Streaming variant of _kick_once: text deltas are forwarded through the
-    app's token sink (same contract crewai's scoped sinks had), and usage is
-    read from the run context after the stream drains."""
+    app's token sink, and usage is read from the run context after the stream
+    drains."""
     from agents import Runner
     from agents.stream_events import RawResponsesStreamEvent
     from openai.types.responses.response_text_delta_event import (

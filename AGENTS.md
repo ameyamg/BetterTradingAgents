@@ -1,6 +1,6 @@
 # AGENTS.md
 
-BetterTradingAgents — a FastAPI + CrewAI multi-agent stock research and paper-trading app.
+BetterTradingAgents - a FastAPI + OpenAI Agents SDK multi-agent stock research and paper-trading app.
 Python 3.12+, dependencies managed by `uv`. No frontend build step (vanilla HTML/CSS/JS in `static/`).
 
 ## Commands
