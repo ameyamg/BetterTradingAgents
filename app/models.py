@@ -530,6 +530,9 @@ class BrokerPosition(BaseModel):
 
     symbol: str
     quantity: float
+    # Shares actually tradable right now (excludes shares locked in open
+    # orders); None when the broker does not break it out.
+    available: float | None = None
     avg_entry_price: float
     current_price: float | None = None
     market_value: float | None = None
@@ -545,6 +548,9 @@ class BrokerOrder(BaseModel):
     run_id: str
     ticker: str
     side: Literal["buy", "sell"]
+    # Orders are sized in shares; notional keeps the USD estimate the row was
+    # submitted with (qty x reference price) for exposure and budget math.
+    qty: float | None = None
     notional: float
     status: str  # pending_submit | unknown | an Alpaca order status
     decision: str | None = None
@@ -563,7 +569,7 @@ class BrokerOrderRequest(BaseModel):
     run_id: str = Field(min_length=1, max_length=64)
     ticker: str = Field(min_length=1, max_length=12)
     side: Literal["buy", "sell"]
-    notional: float = Field(gt=0, le=1_000_000)
+    qty: float = Field(gt=0, le=1_000_000)
     confirm: bool = False
 
 

@@ -278,17 +278,18 @@ async def checks() -> None:
     }
     placed = [(o.ticker, o.side, o.status) for o in session.orders]
     assert placed == [("NVDA", "buy", "accepted"), ("MSFT", "sell", "accepted")], placed
-    assert fake.submit_calls[0].symbol == "NVDA" and fake.submit_calls[0].notional == 5000
-    # A sell is haircut to 99.5% of the holding so it can never short.
+    # Orders are share counts: the $5000 suggestion at the $100 reference price.
+    assert fake.submit_calls[0].symbol == "NVDA" and fake.submit_calls[0].qty == 50.0
+    # A sell is capped to the shares actually held, never a dollar haircut.
     assert fake.submit_calls[1].symbol == "MSFT"
-    assert abs(fake.submit_calls[1].notional - 1990.0) < 0.01
+    assert fake.submit_calls[1].qty == 10.0
     assert not automation._session_lock.locked()
     # The session row carries the full picture for the UI.
     snapshot = await automation.status_snapshot()
     latest = snapshot.sessions[0]
     assert latest.status == "completed" and latest.run_id == "autorun01"
     assert latest.decisions["TSLA"] == "HOLD" and len(latest.orders) == 2
-    print("happy path OK (dedup, sizing, sell haircut, held guard, confidence bar)")
+    print("happy path OK (dedup, share sizing, sell cap, held guard, confidence bar)")
 
     # ---- candidate rotation: the last session's picks are held back ---------
     captured_excludes: list[set[str]] = []
