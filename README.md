@@ -10,7 +10,7 @@
 [![uv](https://img.shields.io/badge/uv-managed-de5fe9?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](#disclaimer)
 
-[Highlights](#highlights) · [Comparison](#comparison-with-existing-platforms) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#backtesting) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
+[Highlights](#highlights) · [Head-to-head](#head-to-head-with-tradingagents) · [Quick start](#quick-start) · [Using the app](#using-the-app) · [Configuration](#configuration) · [API](#api) · [Backtesting](#backtesting) · [Wiki](https://github.com/kingabzpro/BetterTradingAgents/wiki)
 
 </div>
 
@@ -46,29 +46,9 @@ Paper trading only. Research base: the
 | 🛡️ | **Autopilot with guard rails** | Scheduled paper sessions through the same risk gate and caps, plus a deployment budget, bear-market brake, and session webhook. |
 | 🪶 | **No frontend build step** | Vanilla HTML, CSS, and JavaScript served by FastAPI. |
 
-## Comparison with existing platforms
+## Head-to-head with TradingAgents
 
-What you get out of the box, against the usual alternatives. `-` means not included.
-
-| What you get | BetterTradingAgents | TradingAgents | FinRL-X | QuantConnect Lean |
-|---|:---:|:---:|:---:|:---:|
-| AI research behind every BUY / HOLD / SELL | **Yes** | Yes | - | - |
-| Places orders with a broker ¹ | **Yes** (paper) | - | Yes | Yes |
-| Every call graded against SPY, lessons feed the next run | **Yes** | Partial | - | - |
-| Web app with history and manager chat | **Yes** | - | - | Cloud IDE |
-| Runs free with no signup | **Yes** | No | Yes | Partial ¹ |
-| License | MIT | Apache 2.0 | Apache 2.0 | Apache 2.0 |
-
-¹ FinRL-X and Lean also trade, but from RL and quant code; only here do the AI's own calls reach a broker (Alpaca, paper). Lean's data needs a subscription. Other LLM agents (FinMem, FinAgent) are research code, same shape as TradingAgents.
-
-TradingAgents is the research base for the agent design; the app around it is
-what this project adds. What BetterTradingAgents deliberately does not do:
-live trading (paper only by design), reinforcement learning, or asset classes
-beyond stocks.
-
-### Head-to-head with TradingAgents
-
-Same six calls, same model, same endpoint, same grading. Measured 2026-10-28.
+Six shared NVDA / AMD / MSFT calls, same model, same endpoint, same grading. Measured 2026-10-28.
 
 | | BetterTradingAgents (pro) | TradingAgents |
 |---|---|---|
@@ -83,14 +63,11 @@ Same six calls, same model, same endpoint, same grading. Measured 2026-10-28.
 | LLM providers | OpenAI-compatible | Wider (native Anthropic, Google, Azure, Bedrock) |
 | Crash-resume | No | Yes |
 
-Money on the shared calls is a tie: both frameworks net -$633, and a plain
-momentum baseline would have beaten both. The differences sit around the
-model: paper orders behind risk caps, backtest controls, web app and
-autopilot here; wider providers and crash-resume there.
+Call quality is a wash: both net -$633 on the same card, and a plain momentum baseline beats both. Around the model, this project pulls ahead: paper orders behind risk caps, backtest controls, web app, autopilot; upstream counters with a wider provider list and crash-resume.
+
 Full report: `backtests/report-vs-upstream-benchmark.md`.
 
-¹ Upstream's own backtest docs: "not a portfolio simulator, and must not
-grow one" - orders do not exist there.
+¹ Upstream's own backtest docs: "not a portfolio simulator, and must not grow one" - orders do not exist there.
 
 ## How it works
 
