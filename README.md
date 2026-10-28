@@ -66,6 +66,32 @@ what this project adds. What BetterTradingAgents deliberately does not do:
 live trading (paper only by design), reinforcement learning, or asset classes
 beyond stocks.
 
+### Head-to-head with TradingAgents
+
+Same six calls, same model, same endpoint, same grading. Measured 2026-10-28.
+
+| | BetterTradingAgents (pro) | TradingAgents |
+|---|---|---|
+| Cost per decision | ~$0.011 | ~$0.069 |
+| Time per decision | ~9 s | ~3 min |
+| LLM calls per decision | 7 | ~16 |
+| Net P&L, $10k per BUY | Same (-$633) | -$633 |
+| Paper orders + risk caps | Yes | No ¹ |
+| Backtest A/B, holdout, baselines | Yes | Grid scoring |
+| Web app + guarded autopilot | Yes | - |
+| Local-only guard, OS-keychain keys | Yes | - |
+| LLM providers | OpenAI-compatible | Wider (native Anthropic, Google, Azure, Bedrock) |
+| Crash-resume | No | Yes |
+
+Money on the shared calls is a tie: both frameworks net -$633, and a plain
+momentum baseline would have beaten both. The differences sit around the
+model: paper orders behind risk caps, backtest controls, web app and
+autopilot here; wider providers and crash-resume there.
+Full report: `backtests/report-vs-upstream-benchmark.md`.
+
+¹ Upstream's own backtest docs: "not a portfolio simulator, and must not
+grow one" - orders do not exist there.
+
 ## How it works
 
 ```mermaid
