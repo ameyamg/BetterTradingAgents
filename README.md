@@ -50,19 +50,14 @@ Paper trading only. Research base: the
 
 What you get out of the box, against the usual alternatives. `-` means not included.
 
-| What you get | BetterTradingAgents | FinRL-X | Qlib | TradingAgents | Zipline / Backtrader | QuantConnect Lean |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| AI research behind every BUY / HOLD / SELL | **Yes** | - | - | Yes | - | - |
-| Any OpenAI-compatible model, per agent | **Yes** | - | - | Partial | - | - |
-| Places orders with a broker ¹ | **Yes** (paper) | Yes | - | - | Partial | Yes |
-| Backtesting engine | **Yes** | Yes | Yes | - | Yes | Yes |
-| Pre-trade guards against rejected orders | **Yes** | - | - | - | - | Partial |
-| Every call graded against SPY, lessons feed the next run | **Yes** | - | - | Partial | - | - |
-| Scheduled autopilot with spend caps | **Yes** | - | - | - | - | Yes |
-| Web app with history and manager chat | **Yes** | - | - | - | - | Cloud IDE |
-| Runs free with no signup | **Yes** | Yes | Yes | No | Yes | Partial ¹ |
-| Multi-asset (crypto, futures, forex) | - | Yes | Partial | - | Partial | Yes |
-| License | MIT | Apache 2.0 | MIT | Apache 2.0 | Apache 2.0 / GPL 3.0 | Apache 2.0 |
+| What you get | BetterTradingAgents | TradingAgents | FinRL-X | QuantConnect Lean |
+|---|:---:|:---:|:---:|:---:|
+| AI research behind every BUY / HOLD / SELL | **Yes** | Yes | - | - |
+| Places orders with a broker ¹ | **Yes** (paper) | - | Yes | Yes |
+| Every call graded against SPY, lessons feed the next run | **Yes** | Partial | - | - |
+| Web app with history and manager chat | **Yes** | - | - | Cloud IDE |
+| Runs free with no signup | **Yes** | No | Yes | Partial ¹ |
+| License | MIT | Apache 2.0 | Apache 2.0 | Apache 2.0 |
 
 ¹ FinRL-X and Lean also trade, but from RL and quant code; only here do the AI's own calls reach a broker (Alpaca, paper). Lean's data needs a subscription. Other LLM agents (FinMem, FinAgent) are research code, same shape as TradingAgents.
 
